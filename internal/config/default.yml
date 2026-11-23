@@ -1,0 +1,89 @@
+# Gemba configuration.
+# Copy this file, edit it, and point GEMBA_CONFIG at the copy.
+# Everything environment-specific lives here; the code should not need changes.
+
+brand:
+  name: Gemba
+  mark: 現場          # one or two characters shown in the seal; initials work too
+
+# Colours, as six-digit hex. Change these to rebrand. Any key left out keeps its default.
+theme:
+  light:
+    paper: "#f4efe4"       # page background
+    surface: "#fffdf8"     # cards and panels
+    ink: "#1c1b1a"         # text and strong lines
+    muted: "#6f6a62"       # secondary text
+    rule: "#d8d0c1"        # soft dividers
+    accent: "#d6402b"      # brand colour: seal, expedite, active navigation
+    accent-ink: "#ffffff"  # text on the accent colour
+    ok: "#2f7d5b"
+    warn: "#a86f00"
+    stop: "#c2281c"
+  dark:
+    paper: "#161514"
+    surface: "#211f1d"
+    ink: "#f1ece2"
+    muted: "#a39d92"
+    rule: "#3a3733"
+    accent: "#ef5b45"
+    accent-ink: "#161514"
+    ok: "#5fb48d"
+    warn: "#e0aa3e"
+    stop: "#f0624f"
+
+# One workspace per team. Each is isolated from the others.
+workspaces:
+  - slug: infra
+    name: Infrastructure
+    store: demo            # demo = fictional in-memory data; github = a real project
+
+    # Work cells: one per discipline. Each gets its own queue.
+    cells:
+      - { id: network,  name: Network }
+      - { id: platform, name: Platform }
+      - { id: data,     name: Data Services }
+
+    # People and their personal WIP limits (default_wip_limit applies if omitted).
+    people:
+      - { login: nakamura,  name: Rin Nakamura,  cell: network }
+      - { login: okafor,    name: Ada Okafor,    cell: platform }
+      - { login: lindqvist, name: Sam Lindqvist, cell: platform }
+      - { login: reyes,     name: Marco Reyes,   cell: platform }
+      - { login: haddad,    name: Lena Haddad,   cell: platform }
+      - { login: brooks,    name: Tyler Brooks,  cell: platform }
+      - { login: chen,      name: Avery Chen,    cell: data }
+      - { login: patel,     name: Priya Patel,   cell: data }
+      - { login: mbeki,     name: Jonas Mbeki,   cell: data }
+      - { login: sato,      name: Hana Sato,     cell: data, wip_limit: 3 }
+
+    policies:
+      default_wip_limit: 2
+      # A mirrored ticket surfaces for triage once it has been open this long.
+      # Anything resolved sooner goes through the fast lane and is only counted.
+      triage_after_hours: 8
+      # Source-system priorities that surface for triage immediately.
+      urgent_priorities: [high, urgent]
+      # In-progress work older than this is flagged as aging.
+      aging_days: 5
+      # Throughput is measured over this many weeks...
+      throughput_weeks: 4
+      # ...and the capacity line shows what fits in this many weeks.
+      horizon_weeks: 2
+
+    # Sign-in names allowed to triage, reorder and record trade-offs.
+    managers: []
+    # Sign-in names with read-only access.
+    members: []
+
+  - slug: apps
+    name: Application Support
+    store: demo
+    cells:
+      - { id: web,  name: Web }
+      - { id: integration, name: Integration }
+    people:
+      - { login: ito,     name: Kenji Ito,     cell: web }
+      - { login: alvarez, name: Sofia Alvarez, cell: web }
+      - { login: novak,   name: Petra Novak,   cell: integration }
+    managers: []
+    members: []
