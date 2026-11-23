@@ -26,7 +26,10 @@ type Server struct {
 	// in every deployed environment.
 	RequireAuth bool
 	Static      fs.FS // the built web app; may be nil
-	Log         *slog.Logger
+	// Logo replaces the built-in mark when set.
+	Logo     []byte
+	LogoType string // its content type
+	Log      *slog.Logger
 }
 
 // identity is who is asking. Sign-in is delegated to the platform: Azure
@@ -63,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
 	mux.HandleFunc("GET /api/session", s.session)
+	mux.HandleFunc("GET /api/logo", s.logo)
 	mux.HandleFunc("GET /api/w/{ws}/floor", s.in(false, s.floor))
 	mux.HandleFunc("GET /api/w/{ws}/inbox", s.in(false, s.inbox))
 	mux.HandleFunc("POST /api/w/{ws}/inbox/{id}", s.in(true, s.triage))
@@ -129,18 +133,41 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 		HorizonWeeks int           `json:"horizonWeeks"`
 	}
 	out := struct {
-		User       string       `json:"user"`
-		Brand      config.Brand `json:"brand"`
+		User  string `json:"user"`
+		Brand struct {
+			Name string `json:"name"`
+			Logo string `json:"logo,omitempty"`
+		} `json:"brand"`
 		Theme      config.Theme `json:"theme"`
 		COS        []string     `json:"cos"`
 		Workspaces []workspace  `json:"workspaces"`
-	}{User: who.Name, Brand: s.Config.Brand, Theme: s.Config.Theme, COS: config.COS, Workspaces: []workspace{}}
+	}{User: who.Name, Theme: s.Config.Theme, COS: config.COS, Workspaces: []workspace{}}
+	out.Brand.Name = s.Config.Brand.Name
+	if s.Logo != nil {
+		out.Brand.Logo = "/api/logo"
+	}
 	for _, ws := range s.Config.Workspaces {
 		if canRead, canWrite := access(ws, who); canRead {
 			out.Workspaces = append(out.Workspaces, workspace{ws.Slug, ws.Name, canWrite, ws.Cells, ws.Policies.HorizonWeeks})
 		}
 	}
 	writeJSON(w, 200, out)
+}
+
+func (s *Server) logo(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identify(r); !ok {
+		fail(w, 401, "Sign-in required")
+		return
+	}
+	if s.Logo == nil {
+		fail(w, 404, "No custom logo is configured")
+		return
+	}
+	w.Header().Set("Content-Type", s.LogoType)
+	// An SVG can carry script; this stops it running if the file is opened directly.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(s.Logo)
 }
 
 func (s *Server) floor(w http.ResponseWriter, r *http.Request, q *request) {

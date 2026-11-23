@@ -58,7 +58,7 @@ p {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-weight: 700;
   font-size: 17px;
   letter-spacing: 0.04em;
@@ -66,21 +66,10 @@ p {
 .brand:hover {
   text-decoration: none;
 }
-/* A hanko: the red seal that signs a finished piece of work. */
-.seal {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 5px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: 0;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
+.logo {
+  display: block;
+  height: 30px;
+  width: auto;
 }
 .ws-pick,
 .ws-name {
@@ -93,18 +82,9 @@ p {
   margin-left: auto;
 }
 .top nav a {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2px 14px 4px;
+  padding: 6px 14px;
   border-bottom: 3px solid transparent;
   font-weight: 600;
-}
-.top nav a small {
-  font-size: 10px;
-  font-weight: 400;
-  color: var(--muted);
-  letter-spacing: 0.2em;
 }
 .top nav a:hover {
   text-decoration: none;
@@ -576,7 +556,7 @@ button:disabled {
     justify-content: space-between;
   }
   .top nav a {
-    padding: 2px 6px 4px;
+    padding: 6px;
   }
   main {
     padding: 20px 16px 60px;

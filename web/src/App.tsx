@@ -1,15 +1,16 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { type Session, type Workspace, useData } from "./api";
+import { Logo } from "./Logo";
 import { Board } from "./pages/Board";
 import { Queues } from "./pages/Queues";
 import { Triage } from "./pages/Triage";
 import { TradeoffPage } from "./pages/Tradeoff";
 
 const PAGES = [
-  { id: "board", label: "Board", kanji: "看板" },
-  { id: "triage", label: "Triage", kanji: "受付" },
-  { id: "queues", label: "Queues", kanji: "行列" },
-  { id: "tradeoff", label: "Trade-off", kanji: "決断" },
+  { id: "board", label: "Board" },
+  { id: "triage", label: "Triage" },
+  { id: "queues", label: "Queues" },
+  { id: "tradeoff", label: "Trade-off" },
 ];
 
 function usePath(): [string, (to: string) => void] {
@@ -76,9 +77,7 @@ export function App() {
       <style>{themeCss(session.theme)}</style>
       <header className="top">
         <Link to={`/w/${ws.slug}/board`} go={go} className="brand">
-          <span className="seal" aria-hidden="true">
-            {session.brand.mark}
-          </span>
+          {session.brand.logo ? <img className="logo" src={session.brand.logo} alt="" /> : <Logo />}
           {session.brand.name}
         </Link>
         {session.workspaces.length > 1 ? (
@@ -101,7 +100,6 @@ export function App() {
           {PAGES.map((p) => (
             <Link key={p.id} to={`/w/${ws.slug}/${p.id}`} go={go} className={p.id === page ? "on" : undefined}>
               {p.label}
-              <small aria-hidden="true">{p.kanji}</small>
             </Link>
           ))}
         </nav>

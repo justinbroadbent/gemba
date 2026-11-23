@@ -53,7 +53,7 @@ export type Workspace = { slug: string; name: string; canWrite: boolean; cells: 
 
 export type Session = {
   user: string;
-  brand: { name: string; mark: string };
+  brand: { name: string; logo?: string };
   theme: { light: Record<string, string>; dark: Record<string, string> };
   cos: string[];
   workspaces: Workspace[];

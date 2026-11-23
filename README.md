@@ -1,4 +1,4 @@
-# Gemba 現場
+# Gemba
 
 A lean flow board for operations teams, layered on top of GitHub Issues and Projects.
 
@@ -57,7 +57,7 @@ Everything environment-specific is in one YAML file. The built-in default,
 
 | Section | What it controls |
 |---|---|
-| `brand` | The name and the one or two characters in the seal |
+| `brand` | The name, and optionally your own logo in place of the built-in mark |
 | `theme` | Every colour, for light and dark. Change these to rebrand |
 | `workspaces` | One per team: cells, people and WIP limits, policies, who may manage it, and where its items live |
 

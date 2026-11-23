@@ -253,6 +253,10 @@ func (g *GitHub) item(n ghNode) Item {
 			}
 		case is(v, g.cfg.PriorityField):
 			i.ExtPriority = strings.ToLower(v.Text + v.Name)
+		case is(v, g.cfg.SourceURLField):
+			if u := strings.TrimSpace(v.Text); strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
+				i.SourceURL = u
+			}
 		case is(v, g.cfg.DueField):
 			if t, err := time.Parse("2006-01-02", v.Date); err == nil {
 				i.Due = &t

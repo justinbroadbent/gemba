@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/justinbroadbent/gemba/internal/api"
@@ -61,6 +63,19 @@ func main() {
 		RequireAuth: os.Getenv("GEMBA_REQUIRE_AUTH") == "1",
 		Static:      web.Dist(),
 		Log:         log,
+	}
+	if cfg.Brand.Logo != "" {
+		types := map[string]string{".svg": "image/svg+xml", ".png": "image/png"}
+		kind, ok := types[strings.ToLower(filepath.Ext(cfg.Brand.Logo))]
+		if !ok {
+			log.Error("brand.logo must be an .svg or .png file", "logo", cfg.Brand.Logo)
+			os.Exit(1)
+		}
+		if srv.Logo, err = os.ReadFile(cfg.Brand.Logo); err != nil {
+			log.Error("brand.logo", "err", err)
+			os.Exit(1)
+		}
+		srv.LogoType = kind
 	}
 	addr := os.Getenv("GEMBA_ADDR")
 	if addr == "" {

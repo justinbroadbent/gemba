@@ -29,6 +29,9 @@ type card struct {
 
 func cardOf(i store.Item, ws *config.Workspace, now time.Time) card {
 	c := card{ID: i.ID, Title: i.Title, URL: i.URL, Cell: i.Cell, COS: i.COS, Mirrored: i.Mirrored, Owner: i.Assignee}
+	if i.SourceURL != "" {
+		c.URL = i.SourceURL // open the item where it is worked
+	}
 	if p := ws.Person(i.Assignee); p != nil {
 		c.Owner = p.Name
 	}

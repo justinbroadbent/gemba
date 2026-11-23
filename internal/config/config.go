@@ -31,8 +31,8 @@ type Config struct {
 }
 
 type Brand struct {
-	Name string `yaml:"name" json:"name"`
-	Mark string `yaml:"mark" json:"mark"`
+	Name string `yaml:"name"`
+	Logo string `yaml:"logo"` // optional path to an SVG or PNG that replaces the built-in mark
 }
 
 type Theme struct {
@@ -92,6 +92,9 @@ type GitHub struct {
 	PriorityField string `yaml:"priority_field"`
 	DueField      string `yaml:"due_field"`
 	MirroredLabel string `yaml:"mirrored_label"` // issue label marking a mirrored ticket
+	// SourceURLField is a text field holding the link to the ticket a mirrored
+	// issue was copied from. Cards open that link, since that is where the work is done.
+	SourceURLField string `yaml:"source_url_field"`
 }
 
 func (w *Workspace) Person(login string) *Person {
@@ -141,9 +144,6 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Brand.Name == "" {
 		c.Brand.Name = defaults.Brand.Name
-	}
-	if c.Brand.Mark == "" {
-		c.Brand.Mark = defaults.Brand.Mark
 	}
 	var err error
 	if c.Theme.Light, err = mergeTheme(defaults.Theme.Light, c.Theme.Light); err != nil {
@@ -261,6 +261,7 @@ func (w *Workspace) normalise(d Policies) error {
 		def(&g.PriorityField, "Source priority")
 		def(&g.DueField, "Due")
 		def(&g.MirroredLabel, "mirrored")
+		def(&g.SourceURLField, "Source URL")
 		if g.InProgressStatus == nil {
 			g.InProgressStatus = []string{"In Progress"}
 		}

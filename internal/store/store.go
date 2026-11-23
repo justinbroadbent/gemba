@@ -24,11 +24,14 @@ const (
 
 // Item is one unit of work. ID is unique within a workspace.
 type Item struct {
-	ID      int
-	Title   string
-	URL     string
-	Created time.Time
-	Status  string
+	ID    int
+	Title string
+	URL   string
+	// SourceURL is where a mirrored item is actually worked: the ticket in the
+	// external system. Empty for items that live in the store itself.
+	SourceURL string
+	Created   time.Time
+	Status    string
 
 	Cell string   // discipline queue this belongs to; empty until sorted
 	COS  string   // class of service; empty means not yet triaged

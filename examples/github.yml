@@ -11,6 +11,7 @@
 #   Blocked           text            the reason; empty means not blocked
 #   Source priority   single select   whatever your ticketing system uses
 #   Due               date
+#   Source URL        text            link to the original ticket, for mirrored issues
 # Issues copied in from a ticketing system carry the "mirrored" label.
 
 workspaces:
@@ -33,6 +34,7 @@ workspaces:
       priority_field: Source priority
       due_field: Due
       mirrored_label: mirrored
+      source_url_field: Source URL
 
     cells:
       - { id: network,  name: Network }

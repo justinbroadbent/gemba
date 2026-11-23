@@ -4,7 +4,7 @@
 
 brand:
   name: Gemba
-  mark: 現場          # one or two characters shown in the seal; initials work too
+  # logo: ./our-logo.svg   # optional image to replace the built-in mark; SVG or PNG
 
 # Colours, as six-digit hex. Change these to rebrand. Any key left out keeps its default.
 theme:
@@ -14,7 +14,7 @@ theme:
     ink: "#1c1b1a"         # text and strong lines
     muted: "#6f6a62"       # secondary text
     rule: "#d8d0c1"        # soft dividers
-    accent: "#d6402b"      # brand colour: seal, expedite, active navigation
+    accent: "#d6402b"      # brand colour: the logo seal, expedite, active navigation
     accent-ink: "#ffffff"  # text on the accent colour
     ok: "#2f7d5b"
     warn: "#a86f00"

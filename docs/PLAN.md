@@ -216,14 +216,14 @@ items count equally regardless of size.
 
 ## 5. Screens
 
-1. **Board (看板).** The standup screen. One swim lane per cell, three columns: next up,
+1. **Board.** The standup screen. One swim lane per cell, three columns: next up,
    in progress, done since last standup. Above the lanes, four counts: to triage,
    blocked, aging, over limit. Each lane header shows people with their load as dots
    against their limit.
-2. **Triage (受付).** The inbox. Each row: why it surfaced, then cell, class of service
+2. **Triage.** The inbox. Each row: why it surfaced, then cell, class of service
    and front or back of queue, set in one action.
-3. **Queues (行列).** One ranked column per cell with the capacity line drawn in. Drag to reorder.
-4. **Trade-off (決断).** Choose an item and a cell. See the queue, what would fall past the
+3. **Queues.** One ranked column per cell with the capacity line drawn in. Drag to reorder.
+4. **Trade-off.** Choose an item and a cell. See the queue, what would fall past the
    line, and what is in progress. Choose to pause something or not, name who authorized
    it, and confirm. The decision is written as comments on the affected issues.
 
@@ -231,7 +231,7 @@ items count equally regardless of size.
 
 - Japanese minimalism: paper background, ink text, one strong accent, generous space.
 - Flat panels with a firm ink outline, in the manner of manga panels. No gradients or decoration.
-- Small kanji labels as accents beside English labels, never instead of them.
+- The interface is in plain English. The one Japanese element is the logo: 現場 (gemba) in brush calligraphy with a red seal.
 - Colour carries meaning only: the accent for expedite and brand, red for stopped, amber
   for aging. A calm board has almost no colour on it.
 - Every number on screen must lead to a decision. If it does not, it is removed.
