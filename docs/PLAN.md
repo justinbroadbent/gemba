@@ -1,6 +1,6 @@
 # Gemba: product and build plan
 
-Status: draft for review. Nothing below is built yet.
+Status: a working prototype exists. Section 11 lists what is built and where it differs from this plan.
 
 ## 1. What this is
 
@@ -375,3 +375,38 @@ These are assumptions, not confirmed facts:
 - Work that crosses cells as a routed sequence. Use sub-issues, one per cell.
 - Estimation, time tracking, and any per-person reporting.
 - A workspace settings screen and self-service onboarding.
+
+## 11. Prototype status
+
+Built and verified:
+
+- The flow engine, with tests for every rule in section 4.
+- Triage, queue ordering and trade-off actions, with tests.
+- The JSON API, with tests for sign-in enforcement, read-only members and workspace isolation.
+- All four screens in React, themed from the configuration file, in light and dark.
+- A demo store with fictional data, and two demo workspaces to show tenancy.
+- A GitHub store that reads a Projects (v2) project and writes cell, class of service, rank,
+  status-back-to-open and comments. Verified by hand against a real test project.
+- A seeder that fills a test project with fictional issues.
+- A Dockerfile producing one container.
+
+Where the prototype differs from the plan:
+
+| Plan | Prototype | Why |
+|---|---|---|
+| GitHub App with webhooks | A token, and a 20-second read cache | An App needs registering in the target organisation. The store interface does not change. |
+| Postgres for cache, history and audit | No database. Timestamps come from GitHub; the audit trail is structured logs | Nothing in the four screens needs stored history yet. The flow summary (M7) will. |
+| Entra groups per workspace | Lists of sign-in names in the config | Group claims need a real tenant to test against. |
+| Workspace config in each repository | All workspaces in one deployment file | Simpler to run locally. |
+| TanStack Query and dnd-kit | Plain fetch and native drag and drop | Fewer dependencies for the same behaviour. |
+
+Still to do before real use:
+
+1. The contract test suite for the GitHub store, with recorded responses.
+2. Browser end-to-end tests and an accessibility pass.
+3. GitHub App authentication and webhooks.
+4. Postgres, then the flow summary for directors.
+5. Entra group-based membership.
+6. Infrastructure as code for Azure.
+7. "Started" time for GitHub items is taken from when the Status field last changed. This is
+   right for items that went straight to in progress and approximate otherwise.

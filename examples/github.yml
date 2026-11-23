@@ -1,0 +1,46 @@
+# Example: one workspace backed by a real GitHub project.
+#
+# Run with:
+#   GEMBA_CONFIG=examples/github.yml GITHUB_TOKEN=<token with repo and project scope> gemba
+#
+# The project needs these fields (names can be changed in the mapping below):
+#   Status            single select   the built-in one is fine
+#   Cell              single select   one option per cell, named like the cells below
+#   Class of service  single select   Expedite, Fixed date, Standard, Background
+#   Rank              number
+#   Blocked           text            the reason; empty means not blocked
+#   Source priority   single select   whatever your ticketing system uses
+#   Due               date
+# Issues copied in from a ticketing system carry the "mirrored" label.
+
+workspaces:
+  - slug: infra
+    name: Infrastructure
+    store: github
+    github:
+      owner: your-org            # user or organisation that owns the project
+      repo: work-items           # repository holding the issues
+      project: 1                 # project number, from its URL
+      # Everything below is optional and shows the defaults.
+      status_field: Status
+      open_status: Todo
+      in_progress_statuses: [In Progress]
+      done_statuses: [Done]
+      cell_field: Cell
+      cos_field: Class of service
+      rank_field: Rank
+      blocked_field: Blocked
+      priority_field: Source priority
+      due_field: Due
+      mirrored_label: mirrored
+
+    cells:
+      - { id: network,  name: Network }
+      - { id: platform, name: Platform }
+      - { id: data,     name: Data Services }
+
+    people:                      # login is the GitHub login
+      - { login: octocat, name: Mona Octocat, cell: platform, wip_limit: 2 }
+
+    managers: [you@example.com]  # sign-in names allowed to make changes
+    members: []

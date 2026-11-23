@@ -19,3 +19,6 @@ web/dist/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local configuration
+*.local.yml

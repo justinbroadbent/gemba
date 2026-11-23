@@ -213,3 +213,11 @@ func (s *DemoStore) Comment(_ context.Context, id int, text string) error {
 	s.Comments = append(s.Comments, fmt.Sprintf("#%d: %s", id, text))
 	return nil
 }
+
+// DemoTitle makes up a believable work item title for a cell.
+func DemoTitle(rnd *rand.Rand, cell string) string {
+	if _, ok := demoVerbs[cell]; !ok {
+		cell = "platform"
+	}
+	return demoVerbs[cell][rnd.Intn(len(demoVerbs[cell]))] + " " + demoNouns[cell][rnd.Intn(len(demoNouns[cell]))]
+}

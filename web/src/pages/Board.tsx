@@ -82,8 +82,10 @@ function LaneView({ lane, ws, go }: { lane: Lane; ws: Workspace; go: Go }) {
         <div className="column">
           <h3>
             In progress
-            <span className={`count${lane.doing.length > lane.wipLimit ? " stop" : ""}`}>
-              {lane.doing.length} / {lane.wipLimit}
+            {/* A cell with nobody configured has no limit to compare against. */}
+            <span className={`count${lane.wipLimit > 0 && lane.doing.length > lane.wipLimit ? " stop" : ""}`}>
+              {lane.doing.length}
+              {lane.wipLimit > 0 && ` / ${lane.wipLimit}`}
             </span>
           </h3>
           {lane.doing.map((c) => (
@@ -118,7 +120,7 @@ export function Pace({ lane }: { lane: Lane }) {
         <b>{lane.measured ? lane.throughput.toFixed(1) : "–"}</b> finished / week
       </span>
       <span>
-        <b>{Math.round(lane.quickRate)}</b> quick tickets / week
+        <b>{Math.round(lane.quickRate)}</b> quick ticket{Math.round(lane.quickRate) === 1 ? "" : "s"} / week
       </span>
     </p>
   );
