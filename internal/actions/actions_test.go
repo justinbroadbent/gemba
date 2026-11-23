@@ -77,20 +77,20 @@ func TestTriageQueuesAtFrontOrBack(t *testing.T) {
 		t.Fatalf("demo data should have an inbox, got %d", len(inbox))
 	}
 	a, b := inbox[0].Item.ID, inbox[1].Item.ID
-	if err := Triage(ctx, st, ws, a, "data", "standard", false); err != nil {
+	if err := Triage(ctx, st, ws, a, "data", "standard", "", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := Triage(ctx, st, ws, b, "data", "fixed-date", true); err != nil {
+	if err := Triage(ctx, st, ws, b, "data", "fixed-date", "maintenance", true); err != nil {
 		t.Fatal(err)
 	}
 	q := ids(flow.Queue(items(t, st), "data"))
 	if q[0] != b || q[len(q)-1] != a {
 		t.Errorf("queue = %v; want #%d first and #%d last", q, b, a)
 	}
-	if err := Triage(ctx, st, ws, a, "data", "standard", false); !isConflict(err) {
+	if err := Triage(ctx, st, ws, a, "data", "standard", "", false); !isConflict(err) {
 		t.Errorf("triaging twice should conflict, got %v", err)
 	}
-	if err := Triage(ctx, st, ws, inbox[2].Item.ID, "nowhere", "standard", false); err == nil {
+	if err := Triage(ctx, st, ws, inbox[2].Item.ID, "nowhere", "standard", "", false); err == nil {
 		t.Error("unknown cell should be refused")
 	}
 }

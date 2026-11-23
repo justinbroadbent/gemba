@@ -14,6 +14,8 @@ theme:
     ink: "#1c1b1a"         # text and strong lines
     muted: "#6f6a62"       # secondary text
     rule: "#d8d0c1"        # soft dividers
+    wood: "#3d2b1f"        # the timber: top beam and panel frames
+    wood-ink: "#f4efe4"    # text on the timber
     accent: "#d6402b"      # brand colour: the logo seal, expedite, active navigation
     accent-ink: "#ffffff"  # text on the accent colour
     ok: "#2f7d5b"
@@ -25,6 +27,8 @@ theme:
     ink: "#f1ece2"
     muted: "#a39d92"
     rule: "#3a3733"
+    wood: "#4a3526"
+    wood-ink: "#f1ece2"
     accent: "#ef5b45"
     accent-ink: "#161514"
     ok: "#5fb48d"
@@ -43,7 +47,21 @@ workspaces:
       - { id: platform, name: Platform }
       - { id: data,     name: Data Services }
 
+    # Kinds of planned work. Unplanned work is not listed: it is anything that
+    # arrived through the ticketing system, or was expedited. These are the defaults.
+    kinds:
+      - { id: enterprise,  name: Enterprise project, label: enterprise-project, project: true }
+      - { id: department,  name: Department project, label: department-project, project: true }
+      - { id: maintenance, name: Maintenance,        label: maintenance }
+
+    # What matters most right now, one line each. Shown to everyone on "My work".
+    priorities: |
+      ERP migration cut-over is the top enterprise priority this month.
+      Monthly patching must finish inside the change window.
+      Keep unplanned work under half of what we finish.
+
     # People and their personal WIP limits (default_wip_limit applies if omitted).
+    # Add "signin: name@example.com" to a person so the app recognises them when they sign in.
     people:
       - { login: nakamura,  name: Rin Nakamura,  cell: network }
       - { login: okafor,    name: Ada Okafor,    cell: platform }
@@ -63,8 +81,11 @@ workspaces:
       triage_after_hours: 8
       # Source-system priorities that surface for triage immediately.
       urgent_priorities: [high, urgent]
-      # In-progress work older than this is flagged as aging.
+      # In-progress work older than this is flagged as aging, until there is enough
+      # history to compare each item with work of its own type.
       aging_days: 5
+      # In-progress work with no activity for this long is flagged as quiet.
+      quiet_days: 3
       # Throughput is measured over this many weeks...
       throughput_weeks: 4
       # ...and the capacity line shows what fits in this many weeks.

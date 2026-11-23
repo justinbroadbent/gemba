@@ -21,18 +21,20 @@ import (
 type GitHub struct {
 	cfg   *config.GitHub
 	cells []config.Cell
+	kinds []config.Kind
 	token string
 
 	Endpoint string        // GraphQL endpoint; override for GitHub Enterprise Server or tests
 	TTL      time.Duration // how long a read is reused before asking GitHub again
 	Client   *http.Client
 
-	mu        sync.Mutex
-	projectID string
-	fields    map[string]Field // by lower-case name
-	refs      map[int]ref
-	cache     []Item
-	fetched   time.Time
+	mu         sync.Mutex
+	projectID  string
+	fields     map[string]Field // by lower-case name
+	refs       map[int]ref
+	cache      []Item
+	priorities string
+	fetched    time.Time
 }
 
 // Field is a project field and, for single selects, its options by lower-case name.
@@ -46,7 +48,7 @@ type ref struct{ item, issue string }
 
 func NewGitHub(ws *config.Workspace, token string) *GitHub {
 	return &GitHub{
-		cfg: ws.GitHub, cells: ws.Cells, token: token,
+		cfg: ws.GitHub, cells: ws.Cells, kinds: ws.Kinds, token: token,
 		Endpoint: "https://api.github.com/graphql",
 		TTL:      20 * time.Second,
 		Client:   &http.Client{Timeout: 30 * time.Second},
@@ -99,10 +101,11 @@ const projectQuery = `query($owner:String!,$number:Int!,$after:String){
       nodes{
         id
         content{ ... on Issue{
-          id number title url state createdAt closedAt
+          id number title url state createdAt closedAt updatedAt
           assignees(first:1){nodes{login}}
           labels(first:20){nodes{name}}
           repository{nameWithOwner}
+          parent{title url}
         }}
         fieldValues(first:30){nodes{
           ... on ProjectV2ItemFieldSingleSelectValue{name updatedAt field{... on ProjectV2FieldCommon{name}}}
@@ -134,9 +137,11 @@ type ghNode struct {
 		State      string
 		CreatedAt  time.Time
 		ClosedAt   *time.Time
+		UpdatedAt  *time.Time
 		Assignees  struct{ Nodes []struct{ Login string } }
 		Labels     struct{ Nodes []struct{ Name string } }
 		Repository struct{ NameWithOwner string }
+		Parent     *struct{ Title, URL string }
 	}
 	FieldValues struct{ Nodes []ghValue }
 }
@@ -206,13 +211,28 @@ func (g *GitHub) load(ctx context.Context) error {
 		}
 		after = p.Items.PageInfo.EndCursor
 	}
-	g.projectID, g.fields, g.refs, g.cache, g.fetched = id, fields, refs, items, time.Now()
+	priorities := ""
+	if g.cfg.PrioritiesIssue > 0 {
+		var out struct {
+			Repository struct {
+				Issue *struct{ Body string }
+			}
+		}
+		vars := map[string]any{"o": g.cfg.Owner, "r": g.cfg.Repo, "n": g.cfg.PrioritiesIssue}
+		if err := g.GraphQL(ctx, `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){body}}}`, vars, &out); err != nil {
+			return err
+		}
+		if out.Repository.Issue != nil {
+			priorities = out.Repository.Issue.Body
+		}
+	}
+	g.projectID, g.fields, g.refs, g.cache, g.fetched, g.priorities = id, fields, refs, items, time.Now(), priorities
 	return nil
 }
 
 func (g *GitHub) item(n ghNode) Item {
 	c := n.Content
-	i := Item{ID: c.Number, Title: c.Title, URL: c.URL, Created: c.CreatedAt, Status: StatusOpen}
+	i := Item{ID: c.Number, Title: c.Title, URL: c.URL, Created: c.CreatedAt, Updated: c.UpdatedAt, Status: StatusOpen}
 	if len(c.Assignees.Nodes) > 0 {
 		i.Assignee = c.Assignees.Nodes[0].Login
 	}
@@ -257,11 +277,35 @@ func (g *GitHub) item(n ghNode) Item {
 			if u := strings.TrimSpace(v.Text); strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
 				i.SourceURL = u
 			}
+		case is(v, g.cfg.KindField):
+			for _, k := range g.kinds {
+				if strings.EqualFold(k.Name, v.Name) || strings.EqualFold(k.ID, v.Name) {
+					i.Kind = k.ID
+				}
+			}
+		case is(v, g.cfg.ProjectField):
+			i.Project = strings.TrimSpace(v.Text + v.Name)
+		case is(v, g.cfg.ProjectURLField):
+			if u := strings.TrimSpace(v.Text); strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
+				i.ProjectURL = u
+			}
 		case is(v, g.cfg.DueField):
 			if t, err := time.Parse("2006-01-02", v.Date); err == nil {
 				i.Due = &t
 			}
 		}
+	}
+	if i.Kind == "" { // no field value: fall back to labels
+		for _, l := range c.Labels.Nodes {
+			for _, k := range g.kinds {
+				if k.Label != "" && strings.EqualFold(k.Label, l.Name) {
+					i.Kind = k.ID
+				}
+			}
+		}
+	}
+	if i.Project == "" && c.Parent != nil { // a sub-issue belongs to its parent's project
+		i.Project, i.ProjectURL = c.Parent.Title, c.Parent.URL
 	}
 	if c.State == "CLOSED" { // a closed issue is done whatever the board says
 		i.Status = StatusDone
@@ -347,6 +391,18 @@ func (g *GitHub) Update(ctx context.Context, id int, c Change) error {
 		}
 		cached.Cell = *c.Cell
 	}
+	if c.Kind != nil {
+		name := *c.Kind
+		for _, k := range g.kinds {
+			if k.ID == *c.Kind {
+				name = k.Name
+			}
+		}
+		if err := g.set(ctx, r, g.cfg.KindField, map[string]any{"option": name}); err != nil {
+			return err
+		}
+		cached.Kind = *c.Kind
+	}
 	if c.COS != nil {
 		if err := g.set(ctx, r, g.cfg.COSField, map[string]any{"option": strings.ReplaceAll(*c.COS, "-", " ")}); err != nil {
 			return err
@@ -370,6 +426,16 @@ func (g *GitHub) Update(ctx context.Context, id int, c Change) error {
 		cached.Status, cached.Started = StatusOpen, nil
 	}
 	return nil
+}
+
+// Priorities returns the body of the configured priorities issue, if any.
+func (g *GitHub) Priorities(ctx context.Context) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.fresh(ctx); err != nil {
+		return "", err
+	}
+	return g.priorities, nil
 }
 
 func (g *GitHub) Comment(ctx context.Context, id int, text string) error {

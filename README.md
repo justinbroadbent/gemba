@@ -2,15 +2,28 @@
 
 A lean flow board for operations teams, layered on top of GitHub Issues and Projects.
 
-GitHub stays the system of record. Gemba adds what GitHub does not have:
+GitHub stays the system of record, and people keep working items where they live: planned
+work in GitHub, tickets in the ticketing system. Gemba is where everyone comes to see what
+matters, then clicks through to do it.
 
-- **Board.** One swim lane per discipline, with each person's work in progress shown against their limit.
-- **Triage.** An inbox holding only the work that needs a decision. Quick tickets resolve without reaching it.
-- **Queues.** A ranked queue per discipline, with a line showing what fits in the next two weeks at the measured pace.
-- **Trade-off.** Pick a new priority, see what it displaces, and record who authorized it on the affected issues.
+- **Now.** One person's answer to "what should I be doing?": what is in their hands, the one
+  thing to pull next and why, and what changed since they last looked.
+- **Floor.** The team at a glance: who holds what, who has a free hand, what needs help, and
+  each cell's queue as a line through time. It lists exceptions, so everything else can be left alone.
+- **Queues.** Every queued item, ranked, with the capacity line. Built to hold hundreds.
+- **Projects.** Progress and a pace-based forecast for each project, rolled up from its items.
+- **Triage.** An inbox holding only the work that needs a decision.
+- **Trade-off.** Pick a new priority, see what it displaces, and record who authorized it.
 
-Engineers enter nothing in Gemba. It reads status from GitHub and writes back only the cell,
-class of service, rank, and decision comments.
+What makes it more than a board:
+
+- Rank becomes time: every queued item shows when it is likely to start, from the measured pace.
+- Conflicts are caught early: dated work that will miss its date at its current position is flagged.
+- Work is typed without tagging: anything from the ticketing system or expedited is unplanned;
+  the rest is enterprise project, department project or maintenance.
+- "Aging" is fair: an item is compared with how long work of its own type usually takes.
+- Engineers enter nothing. Gemba reads status from GitHub and writes back only the cell, kind,
+  class of service, rank, and decision comments.
 
 **Status: working prototype.** See [docs/PLAN.md](docs/PLAN.md) for the full plan and what is still to do.
 

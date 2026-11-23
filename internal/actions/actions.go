@@ -66,7 +66,10 @@ func bottom(q []store.Item) float64 {
 func ptr[T any](v T) *T { return &v }
 
 // Triage gives an intake item a cell and a class of service, which queues it.
-func Triage(ctx context.Context, st store.Store, ws *config.Workspace, id int, cell, cos string, toTop bool) error {
+func Triage(ctx context.Context, st store.Store, ws *config.Workspace, id int, cell, cos, kind string, toTop bool) error {
+	if kind != "" && ws.Kind(kind) == nil {
+		return bad("Unknown kind of work %q", kind)
+	}
 	if ws.Cell(cell) == nil {
 		return bad("Unknown cell %q", cell)
 	}
@@ -89,7 +92,11 @@ func Triage(ctx context.Context, st store.Store, ws *config.Workspace, id int, c
 	if toTop {
 		r = top(q)
 	}
-	return st.Update(ctx, id, store.Change{Cell: &cell, COS: &cos, Rank: &r})
+	change := store.Change{Cell: &cell, COS: &cos, Rank: &r}
+	if kind != "" {
+		change.Kind = &kind
+	}
+	return st.Update(ctx, id, change)
 }
 
 // Move places a queued item directly before another one, or at the end when

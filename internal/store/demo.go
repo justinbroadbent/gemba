@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
@@ -151,6 +152,41 @@ func NewDemo(cells []DemoCell, throughputWeeks int, now time.Time) *DemoStore {
 		}
 	}
 
+	// Planned work gets a kind, and project work a project. A separate random
+	// source keeps the rest of the floor identical from run to run.
+	kinds := rand.New(rand.NewSource(3))
+	projects := map[string][]string{
+		"enterprise": {"ERP migration", "Zero-trust rollout"},
+		"department": {"Backup modernisation", "Patch automation"},
+	}
+	for _, id := range s.order {
+		i := s.items[id]
+		if i.Status == StatusInProgress { // most work was touched recently; some has gone quiet
+			touched := now.Add(-time.Duration(kinds.Float64()*kinds.Float64()*6*24) * time.Hour)
+			if touched.Before(*i.Started) {
+				touched = *i.Started
+			}
+			i.Updated = &touched
+		}
+		if i.Mirrored || i.COS == "" {
+			continue
+		}
+		switch x := kinds.Intn(10); {
+		case x < 3:
+			i.Kind = "enterprise"
+		case x < 6:
+			i.Kind = "department"
+		default:
+			i.Kind = "maintenance"
+		}
+		if names, ok := projects[i.Kind]; ok {
+			i.Project = names[kinds.Intn(len(names))]
+			if i.Kind == "enterprise" {
+				i.ProjectURL = "https://example.com/epics/" + strings.ReplaceAll(strings.ToLower(i.Project), " ", "-")
+			}
+		}
+	}
+
 	if len(cells) == 0 {
 		return s
 	}
@@ -190,6 +226,9 @@ func (s *DemoStore) Update(_ context.Context, id int, c Change) error {
 	}
 	if c.Cell != nil {
 		i.Cell = *c.Cell
+	}
+	if c.Kind != nil {
+		i.Kind = *c.Kind
 	}
 	if c.COS != nil {
 		i.COS = *c.COS

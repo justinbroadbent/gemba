@@ -9,9 +9,9 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
   if (error) return <p className="notice stop">{error}</p>;
   if (!data) return null;
 
-  const queue = async (id: number, cell: string, cos: string, top: boolean) => {
+  const queue = async (id: number, cell: string, cos: string, kind: string, top: boolean) => {
     try {
-      await post(`/api/w/${ws.slug}/inbox/${id}`, { cell, cos, top });
+      await post(`/api/w/${ws.slug}/inbox/${id}`, { cell, cos, kind, top });
       setNotice(null);
     } catch (e) {
       setNotice(e instanceof ApiError ? e.message : "Could not queue the item.");
@@ -42,11 +42,12 @@ function TriageRow(props: {
   row: Row;
   ws: Workspace;
   cos: string[];
-  queue: (id: number, cell: string, cos: string, top: boolean) => Promise<void>;
+  queue: (id: number, cell: string, cos: string, kind: string, top: boolean) => Promise<void>;
 }) {
   const { row, ws } = props;
   const [cell, setCell] = useState(row.card.cell ?? "");
   const [cos, setCos] = useState(row.urgent ? "expedite" : "standard");
+  const [kind, setKind] = useState(row.card.kind ?? "");
   const [top, setTop] = useState(row.urgent);
   const [busy, setBusy] = useState(false);
   return (
@@ -55,7 +56,7 @@ function TriageRow(props: {
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
-        await props.queue(row.card.id, cell, cos, top);
+        await props.queue(row.card.id, cell, cos, kind, top);
         setBusy(false);
       }}
     >
@@ -71,6 +72,7 @@ function TriageRow(props: {
         </p>
         <p className="card-meta">
           <span className="num">#{row.card.id}</span>
+          <span>{row.card.typeName}</span>
           <span className={row.urgent ? "flag stop" : undefined}>{row.why}</span>
           {row.priority && !row.urgent && <span>Source priority {row.priority}</span>}
         </p>
@@ -87,6 +89,16 @@ function TriageRow(props: {
               </option>
             ))}
           </select>
+          {!row.card.mirrored && (
+            <select aria-label="Kind of work" value={kind} onChange={(e) => setKind(e.target.value)}>
+              <option value="">Kind of work</option>
+              {ws.kinds.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                </option>
+              ))}
+            </select>
+          )}
           <select aria-label="Class of service" value={cos} onChange={(e) => setCos(e.target.value)}>
             {props.cos.map((c) => (
               <option key={c} value={c}>

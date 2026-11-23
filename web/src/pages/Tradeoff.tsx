@@ -146,13 +146,13 @@ function Decision(props: {
     >
       <section>
         <h2>The new priority</h2>
-        <CardView card={p.item} />
+        <CardView plain card={p.item} />
       </section>
 
       <section>
         <h2>Put it at the front of the {cellName} queue</h2>
         <p>{cost}</p>
-        {p.falls && <CardView card={p.falls} owner={false} />}
+        {p.falls && <CardView plain card={p.falls} owner={false} />}
       </section>
 
       <section>
@@ -168,7 +168,7 @@ function Decision(props: {
             {p.lane.doing.map((c) => (
               <label key={c.id} className="choice">
                 <input type="radio" name="pause" checked={pause === c.id} onChange={() => setPause(c.id)} />
-                <CardView card={c} />
+                <CardView plain card={c} />
               </label>
             ))}
           </div>

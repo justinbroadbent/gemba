@@ -71,6 +71,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/w/{ws}/inbox", s.in(false, s.inbox))
 	mux.HandleFunc("POST /api/w/{ws}/inbox/{id}", s.in(true, s.triage))
 	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(true, s.move))
+	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(false, s.projects))
+	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(false, s.mine))
 	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(false, s.tradeoff))
 	mux.HandleFunc("POST /api/w/{ws}/tradeoff", s.in(true, s.decide))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, 404, "Not found") })
@@ -130,7 +132,9 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 		Name         string        `json:"name"`
 		CanWrite     bool          `json:"canWrite"`
 		Cells        []config.Cell `json:"cells"`
+		Kinds        []config.Kind `json:"kinds"`
 		HorizonWeeks int           `json:"horizonWeeks"`
+		Me           string        `json:"me,omitempty"` // the signed-in person's login here, if recognised
 	}
 	out := struct {
 		User  string `json:"user"`
@@ -148,7 +152,11 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, ws := range s.Config.Workspaces {
 		if canRead, canWrite := access(ws, who); canRead {
-			out.Workspaces = append(out.Workspaces, workspace{ws.Slug, ws.Name, canWrite, ws.Cells, ws.Policies.HorizonWeeks})
+			me := ""
+			if p := ws.PersonBySignIn(who.Name); p != nil {
+				me = p.Login
+			}
+			out.Workspaces = append(out.Workspaces, workspace{ws.Slug, ws.Name, canWrite, ws.Cells, ws.Kinds, ws.Policies.HorizonWeeks, me})
 		}
 	}
 	writeJSON(w, 200, out)
@@ -188,21 +196,56 @@ func (s *Server) inbox(w http.ResponseWriter, r *http.Request, q *request) {
 	writeJSON(w, 200, inboxOf(items, q.ws, q.now))
 }
 
+func (s *Server) projects(w http.ResponseWriter, r *http.Request, q *request) {
+	items, err := q.store.Items(r.Context())
+	if err != nil {
+		s.storeError(w, q, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"projects": projectsOf(items, q.ws, q.now)})
+}
+
+// mine is one person's work. Anyone in the workspace may look at anyone's:
+// it shows only what the board already shows, and nothing historical.
+func (s *Server) mine(w http.ResponseWriter, r *http.Request, q *request) {
+	items, err := q.store.Items(r.Context())
+	if err != nil {
+		s.storeError(w, q, err)
+		return
+	}
+	login := r.URL.Query().Get("as")
+	if login == "" {
+		if p := q.ws.PersonBySignIn(q.who.Name); p != nil {
+			login = p.Login
+		}
+	}
+	priorities := q.ws.Priorities
+	if p, ok := q.store.(store.Prioritizer); ok {
+		if text, err := p.Priorities(r.Context()); err != nil {
+			s.Log.Error("priorities", "workspace", q.ws.Slug, "err", err)
+		} else if text != "" {
+			priorities = text
+		}
+	}
+	writeJSON(w, 200, mineOf(items, q.ws, login, priorities, q.now))
+}
+
 func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 	var in struct {
 		Cell string `json:"cell"`
 		COS  string `json:"cos"`
+		Kind string `json:"kind"`
 		Top  bool   `json:"top"`
 	}
 	id, ok := body(w, r, "id", &in)
 	if !ok {
 		return
 	}
-	if err := actions.Triage(r.Context(), q.store, q.ws, id, in.Cell, in.COS, in.Top); err != nil {
+	if err := actions.Triage(r.Context(), q.store, q.ws, id, in.Cell, in.COS, in.Kind, in.Top); err != nil {
 		s.actionError(w, q, err)
 		return
 	}
-	s.audit(q, "triage", "item", id, "cell", in.Cell, "cos", in.COS, "top", in.Top)
+	s.audit(q, "triage", "item", id, "cell", in.Cell, "cos", in.COS, "kind", in.Kind, "top", in.Top)
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
@@ -229,7 +272,7 @@ func (s *Server) tradeoff(w http.ResponseWriter, r *http.Request, q *request) {
 		s.storeError(w, q, err)
 		return
 	}
-	out := tradeoffOf(items, q.ws)
+	out := tradeoffOf(items)
 	if raw := r.URL.Query().Get("item"); raw != "" {
 		id, _ := strconv.Atoi(raw)
 		p, err := actions.PreviewTradeoff(r.Context(), q.store, q.ws, id, r.URL.Query().Get("cell"), q.now)
@@ -237,7 +280,7 @@ func (s *Server) tradeoff(w http.ResponseWriter, r *http.Request, q *request) {
 			s.actionError(w, q, err)
 			return
 		}
-		out.Preview = previewOf(p, q.ws, q.now)
+		out.Preview = previewOf(p, items, q.ws, q.now)
 	}
 	writeJSON(w, 200, out)
 }

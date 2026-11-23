@@ -17,7 +17,7 @@ var defaultYAML []byte
 // COS lists the classes of service, in the order they are offered.
 var COS = []string{"expedite", "fixed-date", "standard", "background"}
 
-var themeKeys = []string{"paper", "surface", "ink", "muted", "rule", "accent", "accent-ink", "ok", "warn", "stop"}
+var themeKeys = []string{"paper", "surface", "ink", "muted", "rule", "wood", "wood-ink", "accent", "accent-ink", "ok", "warn", "stop"}
 
 var (
 	hexRe  = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -41,15 +41,19 @@ type Theme struct {
 }
 
 type Workspace struct {
-	Slug     string   `yaml:"slug"`
-	Name     string   `yaml:"name"`
-	Store    string   `yaml:"store"`
-	GitHub   *GitHub  `yaml:"github"`
-	Cells    []Cell   `yaml:"cells"`
-	People   []Person `yaml:"people"`
-	Policies Policies `yaml:"policies"`
-	Managers []string `yaml:"managers"`
-	Members  []string `yaml:"members"`
+	Slug   string  `yaml:"slug"`
+	Name   string  `yaml:"name"`
+	Store  string  `yaml:"store"`
+	GitHub *GitHub `yaml:"github"`
+	Cells  []Cell  `yaml:"cells"`
+	Kinds  []Kind  `yaml:"kinds"`
+	// Priorities is a short statement of what matters most right now, one line
+	// each, shown to everyone. A GitHub workspace can read it from an issue instead.
+	Priorities string   `yaml:"priorities"`
+	People     []Person `yaml:"people"`
+	Policies   Policies `yaml:"policies"`
+	Managers   []string `yaml:"managers"`
+	Members    []string `yaml:"members"`
 }
 
 type Cell struct {
@@ -57,7 +61,17 @@ type Cell struct {
 	Name string `yaml:"name" json:"name"`
 }
 
+// Kind is a kind of planned work. Unplanned work is not a kind: it is anything
+// that arrived through the ticketing system or was expedited.
+type Kind struct {
+	ID      string `yaml:"id" json:"id"`
+	Name    string `yaml:"name" json:"name"`
+	Label   string `yaml:"label" json:"-"`         // issue label that marks this kind, if labels are used
+	Project bool   `yaml:"project" json:"project"` // items of this kind belong to a project
+}
+
 type Person struct {
+	SignIn   string `yaml:"signin"` // sign-in name, to recognise this person; optional
 	Login    string `yaml:"login"`
 	Name     string `yaml:"name"`
 	Cell     string `yaml:"cell"`
@@ -69,6 +83,7 @@ type Policies struct {
 	TriageAfterHours float64  `yaml:"triage_after_hours"`
 	UrgentPriorities []string `yaml:"urgent_priorities"`
 	AgingDays        float64  `yaml:"aging_days"`
+	QuietDays        float64  `yaml:"quiet_days"`
 	ThroughputWeeks  int      `yaml:"throughput_weeks"`
 	HorizonWeeks     int      `yaml:"horizon_weeks"`
 }
@@ -95,12 +110,36 @@ type GitHub struct {
 	// SourceURLField is a text field holding the link to the ticket a mirrored
 	// issue was copied from. Cards open that link, since that is where the work is done.
 	SourceURLField string `yaml:"source_url_field"`
+
+	KindField       string `yaml:"kind_field"`        // single select; options match the kind names. Labels are the fallback
+	ProjectField    string `yaml:"project_field"`     // text or single select: the project's name
+	ProjectURLField string `yaml:"project_url_field"` // text: a link to the project, such as its epic
+	// PrioritiesIssue is the number of an issue whose body states the current priorities.
+	PrioritiesIssue int `yaml:"priorities_issue"`
 }
 
 func (w *Workspace) Person(login string) *Person {
 	for i := range w.People {
 		if w.People[i].Login == login {
 			return &w.People[i]
+		}
+	}
+	return nil
+}
+
+func (w *Workspace) PersonBySignIn(name string) *Person {
+	for i := range w.People {
+		if w.People[i].SignIn != "" && strings.EqualFold(w.People[i].SignIn, name) {
+			return &w.People[i]
+		}
+	}
+	return nil
+}
+
+func (w *Workspace) Kind(id string) *Kind {
+	for i := range w.Kinds {
+		if w.Kinds[i].ID == id {
+			return &w.Kinds[i]
 		}
 	}
 	return nil
@@ -208,6 +247,9 @@ func (w *Workspace) normalise(d Policies) error {
 	if p.AgingDays <= 0 {
 		p.AgingDays = d.AgingDays
 	}
+	if p.QuietDays <= 0 {
+		p.QuietDays = d.QuietDays
+	}
 	if p.ThroughputWeeks <= 0 {
 		p.ThroughputWeeks = d.ThroughputWeeks
 	}
@@ -216,6 +258,18 @@ func (w *Workspace) normalise(d Policies) error {
 	}
 	if len(w.Cells) == 0 {
 		return fmt.Errorf("at least one cell is required")
+	}
+	if w.Kinds == nil {
+		w.Kinds = []Kind{
+			{ID: "enterprise", Name: "Enterprise project", Label: "enterprise-project", Project: true},
+			{ID: "department", Name: "Department project", Label: "department-project", Project: true},
+			{ID: "maintenance", Name: "Maintenance", Label: "maintenance"},
+		}
+	}
+	for i := range w.Kinds {
+		if w.Kinds[i].Name == "" {
+			w.Kinds[i].Name = w.Kinds[i].ID
+		}
 	}
 	for i := range w.Cells {
 		if w.Cells[i].Name == "" {
@@ -262,6 +316,9 @@ func (w *Workspace) normalise(d Policies) error {
 		def(&g.DueField, "Due")
 		def(&g.MirroredLabel, "mirrored")
 		def(&g.SourceURLField, "Source URL")
+		def(&g.KindField, "Work type")
+		def(&g.ProjectField, "Project")
+		def(&g.ProjectURLField, "Project URL")
 		if g.InProgressStatus == nil {
 			g.InProgressStatus = []string{"In Progress"}
 		}

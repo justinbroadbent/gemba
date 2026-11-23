@@ -1,15 +1,21 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import { type Session, type Workspace, useData } from "./api";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { type Card, type Session, type Workspace, useData } from "./api";
+import { Detail, DetailContext } from "./Detail";
 import { Logo } from "./Logo";
-import { Board } from "./pages/Board";
+import { FloorPage } from "./pages/Floor";
+import { NowPage } from "./pages/Now";
+import { ProjectsPage } from "./pages/Projects";
 import { Queues } from "./pages/Queues";
 import { Triage } from "./pages/Triage";
 import { TradeoffPage } from "./pages/Tradeoff";
 
+// "Now" and "Floor" are for everyone. The rest are the tools for shaping the line.
 const PAGES = [
-  { id: "board", label: "Board" },
-  { id: "triage", label: "Triage" },
+  { id: "now", label: "Now" },
+  { id: "floor", label: "Floor" },
   { id: "queues", label: "Queues" },
+  { id: "projects", label: "Projects" },
+  { id: "triage", label: "Triage" },
   { id: "tradeoff", label: "Trade-off" },
 ];
 
@@ -54,39 +60,39 @@ function themeCss(theme: Session["theme"]) {
 export function App() {
   const { data: session, error } = useData<Session>("/api/session");
   const [path, go] = usePath();
+  const [detail, setDetail] = useState<Card | null>(null);
+  const close = useCallback(() => setDetail(null), []);
 
   useEffect(() => {
     if (session) document.title = session.brand.name;
   }, [session]);
+  useEffect(() => setDetail(null), [path]);
 
   if (error) return <p className="notice stop">{error}</p>;
   if (!session) return null;
   if (session.workspaces.length === 0)
     return <p className="notice">You are signed in as {session.user}, but have not been added to a workspace yet.</p>;
 
-  const [, w, slug, page = "board"] = path.split("?")[0].split("/");
+  const [, w, slug, page] = path.split("?")[0].split("/");
   const ws = (w === "w" && session.workspaces.find((x) => x.slug === slug)) || null;
   if (!ws || !PAGES.some((p) => p.id === page)) {
-    const fallback = `/w/${session.workspaces[0].slug}/board`;
+    // People the app recognises land on their own work; everyone else on the floor.
+    const to = ws ?? session.workspaces[0];
+    const fallback = `/w/${to.slug}/${to.me ? "now" : "floor"}`;
     if (path !== fallback) queueMicrotask(() => go(fallback));
     return null;
   }
 
   return (
-    <>
+    <DetailContext.Provider value={setDetail}>
       <style>{themeCss(session.theme)}</style>
       <header className="top">
-        <Link to={`/w/${ws.slug}/board`} go={go} className="brand">
+        <Link to={`/w/${ws.slug}/floor`} go={go} className="brand">
           {session.brand.logo ? <img className="logo" src={session.brand.logo} alt="" /> : <Logo />}
           {session.brand.name}
         </Link>
         {session.workspaces.length > 1 ? (
-          <select
-            className="ws-pick"
-            aria-label="Workspace"
-            value={ws.slug}
-            onChange={(e) => go(`/w/${e.target.value}/${page}`)}
-          >
+          <select className="ws-pick" aria-label="Workspace" value={ws.slug} onChange={(e) => go(`/w/${e.target.value}/${page}`)}>
             {session.workspaces.map((x) => (
               <option key={x.slug} value={x.slug}>
                 {x.name}
@@ -111,19 +117,24 @@ export function App() {
       <main key={ws.slug}>
         <Page page={page} ws={ws} session={session} go={go} />
       </main>
-    </>
+      {detail && <Detail card={detail} close={close} />}
+    </DetailContext.Provider>
   );
 }
 
 function Page(props: { page: string; ws: Workspace; session: Session; go: Go }) {
   switch (props.page) {
+    case "now":
+      return <NowPage {...props} />;
     case "triage":
       return <Triage {...props} />;
     case "queues":
       return <Queues {...props} />;
+    case "projects":
+      return <ProjectsPage {...props} />;
     case "tradeoff":
       return <TradeoffPage {...props} />;
     default:
-      return <Board {...props} />;
+      return <FloorPage {...props} />;
   }
 }

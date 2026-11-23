@@ -410,3 +410,48 @@ Still to do before real use:
 6. Infrastructure as code for Azure.
 7. "Started" time for GitHub items is taken from when the Status field last changed. This is
    right for items that went straight to in progress and approximate otherwise.
+
+## 12. Version 2: from board to guide
+
+The first prototype was a tidy board. Review against the personas showed it missed the point:
+boards show inventory and leave people to work out what to do. Version 2 changes what the product is.
+
+Decisions made with the product owner:
+
+- **Everyone uses it.** Engineers come here to see their priority and the team's, then click
+  through to the item in the system where it is worked. They still enter nothing here.
+- **Unplanned work is derived, not tagged.** Anything that arrived through the ticketing system
+  is unplanned and stays so; planned work becomes unplanned if it is expedited. Planned work
+  that stems from a ticket is a separate GitHub issue.
+- **Three kinds of planned work:** enterprise project, department project, maintenance (which
+  includes keeping the lights on, such as patching). Kinds are configurable per workspace.
+- **All truth comes from GitHub issues.** Enterprise projects are tracked elsewhere, but Gemba
+  connects to nothing else: an issue carries its kind, its project's name and a link to it.
+- **Plain English.** The one Japanese element is the logo.
+- **A dojo look,** kept minimal: a timber beam, people on mats with name plates, queued work
+  hanging from a line, priorities on a hanging scroll.
+- **Hundreds of items.** The main pages show only what is in hand, what is next and what is
+  wrong. The long tail lives on the Queues page, folded past the capacity line and searchable.
+
+What the app now works out, so people do not have to:
+
+| Idea | What it does |
+|---|---|
+| Rank into time | Each queued item gets a likely start, from free hands and the cell's measured pace |
+| Conflict detection | Dated work whose likely start is after its latest safe start is flagged, with both dates |
+| Reasons | Every queued item says in a few words why it sits where it does |
+| Free hands | Each person's limit is drawn as slots; a free slot shows what the queue suggests they pull |
+| Exceptions only | The floor opens with sentences about what needs help; everything unlisted can be left alone |
+| Fair aging | An item is aging only against the 85th percentile for work of its own type |
+| Quiet work | In-progress work nobody has touched for days is surfaced |
+| Unplanned load | This week's unplanned arrivals against the usual, per cell |
+| Where the work went | Share of finished work by type, per cell |
+| What changed | A person's list marks what is new or moved up since they last looked |
+
+Still to design:
+
+1. A requester-facing "where is my request" view.
+2. Trade-offs at project level: what a new project delays, and by how long.
+3. Intended mix per cell, shown against the actual mix.
+4. A weekly planning snapshot, for plan attainment.
+5. Mapping sign-in names to people through the identity provider instead of the config file.

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // The API returns view models that are ready to render. No flow rules live here.
 
 export type Cell = { id: string; name: string };
+export type Kind = { id: string; name: string; project: boolean };
 
 export type Card = {
   id: number;
@@ -10,15 +11,30 @@ export type Card = {
   url?: string;
   owner?: string;
   cell?: string;
+  type: string; // "unplanned", a kind id, or "other"
+  typeName: string;
+  kind?: string;
+  project?: string;
+  projectUrl?: string;
   cos?: string;
   due?: string;
   mirrored: boolean;
   blocked?: string;
   blockedFor?: string;
   agingFor?: string;
+  usual?: string;
+  day?: number;
+  usualDays?: number;
+  quietFor?: string;
+  reason?: string;
+  starts?: string;
+  waitDays?: number;
+  risk?: string;
 };
 
-export type Person = { name: string; count: number; limit: number };
+export type Hand = { login: string; name: string; limit: number; items: Card[]; pull: Card | null };
+export type Share = { id: string; name: string; count: number; pct: number };
+export type Alert = { level: "stop" | "warn"; text: string; cell?: string; id?: number; url?: string };
 
 export type Lane = {
   cell: Cell;
@@ -27,7 +43,11 @@ export type Lane = {
   measured: boolean;
   line: number;
   wipLimit: number;
-  people: Person[];
+  mix: Share[];
+  hands: Hand[];
+  freeHands: number;
+  arrivals: number;
+  arrivalsUsual: number;
   queue: Card[];
   doing: Card[];
   done: Card[];
@@ -36,6 +56,7 @@ export type Lane = {
 
 export type Floor = {
   signals: { triage: number; blocked: number; aging: number; over: number };
+  attention: Alert[];
   lanes: Lane[];
 };
 
@@ -49,7 +70,42 @@ export type Preview = { item: Card; lane: Lane; falls: Card | null; alreadyAbove
 export type Tradeoff = { candidates: Candidate[]; preview: Preview | null };
 export type Note = { id: number; title: string; text: string };
 
-export type Workspace = { slug: string; name: string; canWrite: boolean; cells: Cell[]; horizonWeeks: number };
+export type Project = {
+  name: string;
+  url?: string;
+  kind: string;
+  total: number;
+  done: number;
+  doing: number;
+  blocked: number;
+  queued: number;
+  remaining: number;
+  cells: string[];
+  quiet: string;
+  stalled: boolean;
+  forecast: string;
+};
+
+export type PersonRef = { login: string; name: string; count: number; limit: number };
+export type Mine = {
+  person: PersonRef | null;
+  people: PersonRef[];
+  full: boolean;
+  doing: Card[];
+  next: { card: Card; position: number; above: boolean }[];
+  cell?: string;
+  priorities: string[];
+};
+
+export type Workspace = {
+  slug: string;
+  name: string;
+  canWrite: boolean;
+  cells: Cell[];
+  kinds: Kind[];
+  horizonWeeks: number;
+  me?: string;
+};
 
 export type Session = {
   user: string;
@@ -124,3 +180,6 @@ export function useData<T>(path: string | null, pollMs = 0) {
 }
 
 export const label = (cos: string) => cos.charAt(0).toUpperCase() + cos.slice(1).replace("-", " ");
+
+/** Where an item is worked: tickets in the ticketing system, the rest in GitHub. */
+export const home = (c: Card) => (c.mirrored ? "Open the ticket" : "Open the issue");
