@@ -39,10 +39,25 @@ func TypeName(t string, ws *config.Workspace) string {
 	return ws.Kind(t).Name
 }
 
+// TypeIcon names the small mark drawn beside work of a type.
+func TypeIcon(t string, ws *config.Workspace) string {
+	switch t {
+	case Unplanned:
+		return "bolt"
+	case Other:
+		return "dot"
+	}
+	if icon := ws.Kind(t).Icon; icon != "" {
+		return icon
+	}
+	return "dot"
+}
+
 // Share is one type's part of the work a cell finished.
 type Share struct {
 	ID    string  `json:"id"`
 	Name  string  `json:"name"`
+	Icon  string  `json:"icon"`
 	Count int     `json:"count"`
 	Pct   float64 `json:"pct"`
 }
@@ -67,7 +82,7 @@ func Mix(items []store.Item, ws *config.Workspace, cell string, now time.Time) [
 	}
 	out := make([]Share, 0, len(order))
 	for _, t := range order {
-		s := Share{ID: t, Name: TypeName(t, ws), Count: counts[t]}
+		s := Share{ID: t, Name: TypeName(t, ws), Icon: TypeIcon(t, ws), Count: counts[t]}
 		if total > 0 {
 			s.Pct = float64(counts[t]) / float64(total) * 100
 		}

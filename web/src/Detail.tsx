@@ -1,17 +1,14 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { type Card, home, label } from "./api";
+import { TypeIcon } from "./TypeIcon";
 
 /** Any item anywhere can be opened in the side panel. */
 export const DetailContext = createContext<(card: Card | null) => void>(() => {});
 export const useDetail = () => useContext(DetailContext);
 
-/** The mark for a type of work: its initial, with unplanned work in the accent colour. */
+/** The mark for a type of work: a small picture, with unplanned work in the accent colour. */
 export function TypeMark({ card }: { card: Card }) {
-  return (
-    <span className={`mark${card.type === "unplanned" ? " unplanned" : ""}`} title={card.typeName} aria-label={card.typeName}>
-      {card.typeName.charAt(0)}
-    </span>
-  );
+  return <TypeIcon icon={card.icon} name={card.typeName} />;
 }
 
 /** How far through its usual time an in-progress item is. */

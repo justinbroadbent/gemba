@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TypeIcon } from "../TypeIcon";
 import { type Inbox, type Session, type Workspace, ApiError, label, post, useData } from "../api";
 
 type Row = Inbox["rows"][number];
@@ -72,7 +73,10 @@ function TriageRow(props: {
         </p>
         <p className="card-meta">
           <span className="num">#{row.card.id}</span>
-          <span>{row.card.typeName}</span>
+          <span>
+            <TypeIcon icon={row.card.icon} />
+            {row.card.typeName}
+          </span>
           <span className={row.urgent ? "flag stop" : undefined}>{row.why}</span>
           {row.priority && !row.urgent && <span>Source priority {row.priority}</span>}
         </p>

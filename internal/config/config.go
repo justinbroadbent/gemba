@@ -67,6 +67,7 @@ type Kind struct {
 	ID      string `yaml:"id" json:"id"`
 	Name    string `yaml:"name" json:"name"`
 	Label   string `yaml:"label" json:"-"`         // issue label that marks this kind, if labels are used
+	Icon    string `yaml:"icon" json:"icon"`       // the small mark drawn beside items of this kind
 	Project bool   `yaml:"project" json:"project"` // items of this kind belong to a project
 }
 
@@ -266,7 +267,11 @@ func (w *Workspace) normalise(d Policies) error {
 			{ID: "maintenance", Name: "Maintenance", Label: "maintenance"},
 		}
 	}
+	icons := map[string]string{"enterprise": "tower", "department": "house", "maintenance": "wrench"}
 	for i := range w.Kinds {
+		if w.Kinds[i].Icon == "" {
+			w.Kinds[i].Icon = icons[w.Kinds[i].ID] // unknown kinds get a plain mark
+		}
 		if w.Kinds[i].Name == "" {
 			w.Kinds[i].Name = w.Kinds[i].ID
 		}

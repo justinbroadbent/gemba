@@ -49,10 +49,12 @@ workspaces:
 
     # Kinds of planned work. Unplanned work is not listed: it is anything that
     # arrived through the ticketing system, or was expedited. These are the defaults.
+    # icon is the small mark drawn beside each item: tower, house, wrench, flag,
+    # shield, or dot. Unplanned work always carries the bolt.
     kinds:
-      - { id: enterprise,  name: Enterprise project, label: enterprise-project, project: true }
-      - { id: department,  name: Department project, label: department-project, project: true }
-      - { id: maintenance, name: Maintenance,        label: maintenance }
+      - { id: enterprise,  name: Enterprise project, label: enterprise-project, project: true, icon: tower }
+      - { id: department,  name: Department project, label: department-project, project: true, icon: house }
+      - { id: maintenance, name: Maintenance,        label: maintenance, icon: wrench }
 
     # What matters most right now, one line each. Shown to everyone on "My work".
     priorities: |

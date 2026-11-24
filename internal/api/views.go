@@ -34,6 +34,7 @@ type card struct {
 	Cell       string   `json:"cell,omitempty"`
 	Type       string   `json:"type"`     // "unplanned", a kind id, or "other"
 	TypeName   string   `json:"typeName"` // how to say it
+	Icon       string   `json:"icon"`     // the mark drawn for it
 	Kind       string   `json:"kind,omitempty"`
 	Project    string   `json:"project,omitempty"`
 	ProjectURL string   `json:"projectUrl,omitempty"`
@@ -56,7 +57,7 @@ type card struct {
 func (v view) card(i store.Item) card {
 	t := flow.TypeOf(i, v.ws)
 	c := card{ID: i.ID, Title: i.Title, URL: i.URL, Cell: i.Cell, COS: i.COS, Mirrored: i.Mirrored, Owner: i.Assignee,
-		Type: t, TypeName: flow.TypeName(t, v.ws), Kind: i.Kind, Project: i.Project, ProjectURL: i.ProjectURL}
+		Type: t, TypeName: flow.TypeName(t, v.ws), Icon: flow.TypeIcon(t, v.ws), Kind: i.Kind, Project: i.Project, ProjectURL: i.ProjectURL}
 	if i.SourceURL != "" {
 		c.URL = i.SourceURL // open the item where it is worked
 	}

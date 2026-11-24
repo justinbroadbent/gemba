@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { type Card, type Floor, type Hand, type Lane, type Workspace, ApiError, post, useData } from "../api";
 import { type Go, Link } from "../App";
 import { TimeBar, TypeMark, useDetail } from "../Detail";
+import { TypeIcon } from "../TypeIcon";
 
 const ON_THE_LINE = 12; // queued items drawn on the line before the rest are summarised
 
@@ -73,6 +74,7 @@ export function FloorPage({ ws, go }: { ws: Workspace; go: Go }) {
         </button>
         {types.map((t) => (
           <button key={t.id} type="button" className={focus === t.id ? "chip on" : "chip"} onClick={() => setFocus(focus === t.id ? null : t.id)}>
+            <TypeIcon icon={t.icon} />
             {t.name}
           </button>
         ))}
@@ -302,7 +304,10 @@ function Mix({ lane, look }: { lane: Lane; look: Look }) {
       <p className="mix-head">Where finished work went</p>
       {lane.mix.map((s) => (
         <div key={s.id} className={`mix-row ${look.focus && look.focus !== s.id ? "dim" : ""}`} title={`${s.count} of ${total} items`}>
-          <span className="mix-name">{s.name}</span>
+          <span className="mix-name">
+            <TypeIcon icon={s.icon} />
+            {s.name}
+          </span>
           <span className="mix-bar">
             <i className={s.id === "unplanned" ? "unplanned" : undefined} style={{ width: `${s.pct}%` }} />
           </span>

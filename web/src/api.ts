@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // The API returns view models that are ready to render. No flow rules live here.
 
 export type Cell = { id: string; name: string };
-export type Kind = { id: string; name: string; project: boolean };
+export type Kind = { id: string; name: string; project: boolean; icon: string };
 
 export type Card = {
   id: number;
@@ -13,6 +13,7 @@ export type Card = {
   cell?: string;
   type: string; // "unplanned", a kind id, or "other"
   typeName: string;
+  icon: string;
   kind?: string;
   project?: string;
   projectUrl?: string;
@@ -33,7 +34,7 @@ export type Card = {
 };
 
 export type Hand = { login: string; name: string; limit: number; items: Card[]; pull: Card | null };
-export type Share = { id: string; name: string; count: number; pct: number };
+export type Share = { id: string; name: string; icon: string; count: number; pct: number };
 export type Alert = { level: "stop" | "warn"; text: string; cell?: string; id?: number; url?: string };
 
 export type Lane = {
