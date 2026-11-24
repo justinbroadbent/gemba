@@ -142,6 +142,28 @@ export function NowPage({ ws }: { ws: Workspace }) {
             </ol>
           </section>
         )}
+
+        {data.quick.length > 0 && (
+          <section>
+            <h2 className="eyebrow">
+              Got a spare half hour? <span className="count">Quick ones in {data.cell}, oldest first</span>
+            </h2>
+            <ol className="after">
+              {data.quick.map((card) => (
+                <li key={card.id}>
+                  <button type="button" onClick={() => open(card)}>
+                    <span className="num" />
+                    <span className="after-title">
+                      <TypeMark card={card} />
+                      {card.title}
+                    </span>
+                    <span className={`after-why${card.risk ? " warn" : ""}`}>{card.risk ?? card.reason}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
       </div>
 
       {data.priorities.length > 0 && (

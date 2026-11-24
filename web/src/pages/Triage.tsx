@@ -83,7 +83,7 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
           <div key={c.id} className="landing-cell">
             <b>{c.name}</b>
             <span>
-              {c.queued} queued, {c.free === 0 ? "no free hands" : `${c.free} free hand${c.free === 1 ? "" : "s"}`}
+              {c.queued} queued, {c.quick} quick, {c.free === 0 ? "no free hands" : `${c.free} free hand${c.free === 1 ? "" : "s"}`}
             </span>
             <span className="landing-when">{c.back ? `Back of the queue: ${lower(c.back)}` : "No pace measured yet"}</span>
           </div>
@@ -195,7 +195,9 @@ function Choices(props: { value: Choice; set: (c: Choice) => void; data: Inbox; 
 
   let outcome = "Choose a cell to see when this would start.";
   if (cell) {
-    if (v.cos === "expedite") outcome = `Goes ahead of everything in ${cell.name}. Someone should pick it up now.`;
+    if (v.cos === "quick")
+      outcome = `Goes on ${cell.name}'s quick list${cell.quick ? ` with ${cell.quick} other${cell.quick === 1 ? "" : "s"}` : ""}, off the ranked queue. Flagged if nobody takes it within ${data.quickDays} days.`;
+    else if (v.cos === "expedite") outcome = `Goes ahead of everything in ${cell.name}. Someone should pick it up now.`;
     else if (v.top) outcome = `Front of the ${cell.name} queue. ${cell.front || "No pace measured yet"}.`;
     else outcome = `Number ${cell.queued + 1} in the ${cell.name} queue. ${cell.back || "No pace measured yet"}.`;
   }
@@ -226,19 +228,21 @@ function Choices(props: { value: Choice; set: (c: Choice) => void; data: Inbox; 
       </Group>
       <Group name="Handling">
         {props.cos.map((c) => (
-          <Pick key={c} on={v.cos === c} disabled={c === "expedite" && !decide} onClick={() => set({ ...v, cos: c })}>
+          <Pick key={c} on={v.cos === c} disabled={c === "expedite" && !decide} onClick={() => set({ ...v, cos: c, top: c === "quick" ? false : v.top })}>
             {label(c)}
           </Pick>
         ))}
       </Group>
-      <Group name="Place">
-        <Pick on={!v.top} onClick={() => set({ ...v, top: false })}>
-          Back of the queue
-        </Pick>
-        <Pick on={v.top} disabled={!decide} onClick={() => set({ ...v, top: true })}>
-          Front of the queue
-        </Pick>
-      </Group>
+      {v.cos !== "quick" && v.cos !== "expedite" && (
+        <Group name="Place">
+          <Pick on={!v.top} onClick={() => set({ ...v, top: false })}>
+            Back of the queue
+          </Pick>
+          <Pick on={v.top} disabled={!decide} onClick={() => set({ ...v, top: true })}>
+            Front of the queue
+          </Pick>
+        </Group>
+      )}
       <p className="outcome">{outcome}</p>
       {!decide && (
         <p className="outcome-note">

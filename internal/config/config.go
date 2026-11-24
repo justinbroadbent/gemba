@@ -15,7 +15,9 @@ import (
 var defaultYAML []byte
 
 // COS lists the classes of service, in the order they are offered.
-var COS = []string{"expedite", "fixed-date", "standard", "background"}
+// "quick" work skips the ranked queue: it sits on a short list for anyone with
+// a spare half hour.
+var COS = []string{"quick", "standard", "fixed-date", "background", "expedite"}
 
 var themeKeys = []string{"paper", "surface", "ink", "muted", "rule", "wood", "wood-ink", "accent", "accent-ink", "ok", "warn", "stop"}
 
@@ -85,6 +87,7 @@ type Policies struct {
 	UrgentPriorities []string `yaml:"urgent_priorities"`
 	AgingDays        float64  `yaml:"aging_days"`
 	QuietDays        float64  `yaml:"quiet_days"`
+	QuickDays        float64  `yaml:"quick_days"` // a quick item waiting longer than this needs attention
 	ThroughputWeeks  int      `yaml:"throughput_weeks"`
 	HorizonWeeks     int      `yaml:"horizon_weeks"`
 }
@@ -250,6 +253,9 @@ func (w *Workspace) normalise(d Policies) error {
 	}
 	if p.AgingDays <= 0 {
 		p.AgingDays = d.AgingDays
+	}
+	if p.QuickDays <= 0 {
+		p.QuickDays = 2
 	}
 	if p.QuietDays <= 0 {
 		p.QuietDays = d.QuietDays

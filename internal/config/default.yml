@@ -88,6 +88,8 @@ workspaces:
       aging_days: 5
       # In-progress work with no activity for this long is flagged as quiet.
       quiet_days: 3
+      # A quick item still waiting after this many days is flagged.
+      quick_days: 2
       # Throughput is measured over this many weeks...
       throughput_weeks: 4
       # ...and the capacity line shows what fits in this many weeks.

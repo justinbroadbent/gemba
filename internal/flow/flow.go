@@ -109,7 +109,7 @@ func FastLane(items []store.Item, ws *config.Workspace, now time.Time) int {
 func Queue(items []store.Item, cell string) []store.Item {
 	var q []store.Item
 	for _, i := range items {
-		if Stage(i) == Queued && i.Cell == cell {
+		if Stage(i) == Queued && i.Cell == cell && i.COS != "quick" {
 			q = append(q, i)
 		}
 	}
@@ -124,6 +124,19 @@ func Queue(items []store.Item, cell string) []store.Item {
 		}
 		return q[a].Created.Before(q[b].Created)
 	})
+	return q
+}
+
+// Quick is a cell's quick list: small jobs that are not worth a place in the
+// ranked queue. Anyone with a spare half hour takes the oldest.
+func Quick(items []store.Item, cell string) []store.Item {
+	var q []store.Item
+	for _, i := range items {
+		if Stage(i) == Queued && i.Cell == cell && i.COS == "quick" {
+			q = append(q, i)
+		}
+	}
+	sort.SliceStable(q, func(a, b int) bool { return q[a].Created.Before(q[b].Created) })
 	return q
 }
 
@@ -146,6 +159,7 @@ func (l Load) Over() bool { return len(l.Items) > l.Person.WIPLimit }
 type Lane struct {
 	Cell       config.Cell
 	Queue      []store.Item
+	Quick      []store.Item // the quick list, oldest first
 	Doing      []store.Item
 	Done       []store.Item // triaged work finished since the last standup
 	QuickDone  int          // fast-lane tickets finished since the last standup
@@ -172,7 +186,7 @@ func (l Lane) Blocked() int {
 
 func BuildLane(items []store.Item, ws *config.Workspace, cell config.Cell, now time.Time) Lane {
 	p := ws.Policies
-	l := Lane{Cell: cell, Queue: Queue(items, cell.ID)}
+	l := Lane{Cell: cell, Queue: Queue(items, cell.ID), Quick: Quick(items, cell.ID)}
 	window := now.Add(-hours(float64(p.ThroughputWeeks) * 7 * 24))
 	since := LastStandup(now)
 	triaged, quick := 0, 0
@@ -186,13 +200,15 @@ func BuildLane(items []store.Item, ws *config.Workspace, cell config.Cell, now t
 		if i.Closed == nil || i.Closed.Before(window) {
 			continue
 		}
-		if i.COS != "" {
+		// Quick work is left out of the pace that forecasts the ranked queue.
+		queued := i.COS != "" && i.COS != "quick"
+		if queued {
 			triaged++
 		} else {
 			quick++
 		}
 		if !i.Closed.Before(since) {
-			if i.COS != "" {
+			if queued {
 				l.Done = append(l.Done, i)
 			} else {
 				l.QuickDone++

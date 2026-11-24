@@ -174,3 +174,32 @@ func TestAttentionListsOnlyExceptions(t *testing.T) {
 		t.Errorf("the most serious comes first, got %q", got[0])
 	}
 }
+
+func TestQuickWorkStaysOffTheRankedQueue(t *testing.T) {
+	ws := guideWorkspace()
+	ws.Policies.QuickDays = 2
+	items := []store.Item{
+		{ID: 1, Title: "Ranked", Cell: "net", COS: "standard", Rank: rk(1)},
+		{ID: 2, Title: "Fresh quick", Cell: "net", COS: "quick", Created: now.Add(-3 * time.Hour)},
+		{ID: 3, Title: "Old quick", Cell: "net", COS: "quick", Created: now.Add(-72 * time.Hour)},
+		{ID: 4, Cell: "net", COS: "quick", Status: store.StatusDone, Closed: agoP(5)},
+	}
+	lane := BuildLane(items, ws, *ws.Cell("net"), now)
+	if len(lane.Queue) != 1 || lane.Queue[0].ID != 1 {
+		t.Errorf("only ranked work is in the queue: %+v", lane.Queue)
+	}
+	if len(lane.Quick) != 2 || lane.Quick[0].ID != 3 {
+		t.Errorf("the quick list holds both, oldest first: %+v", lane.Quick)
+	}
+	if lane.Throughput != 0 || lane.QuickRate == 0 {
+		t.Errorf("finished quick work does not set the pace of the ranked queue: %v %v", lane.Throughput, lane.QuickRate)
+	}
+	var texts []string
+	for _, a := range Attention(items, ws, BuildNorms(items, ws, now), now) {
+		texts = append(texts, a.Text)
+	}
+	all := strings.Join(texts, "\n")
+	if !strings.Contains(all, "Quick, but waiting 3 d: Old quick") || strings.Contains(all, "Fresh quick") {
+		t.Errorf("only the quick item nobody took is flagged:\n%s", all)
+	}
+}

@@ -143,9 +143,33 @@ function Room(props: {
         )}
       </div>
 
+      {lane.quick.length > 0 && <QuickList lane={lane} look={look} />}
       <TheLine {...props} />
       <Mix lane={lane} look={look} />
     </section>
+  );
+}
+
+/** Small jobs kept off the line. Anyone with a spare half hour takes the oldest. */
+function QuickList({ lane, look }: { lane: Lane; look: Look }) {
+  const open = useDetail();
+  return (
+    <div className="quick">
+      <p className="line-head">
+        <b>Quick ones</b>
+        <span>{lane.quick.length} waiting. For a spare half hour, oldest first.</span>
+      </p>
+      <ul>
+        {lane.quick.map((c) => (
+          <li key={c.id}>
+            <button type="button" data-item={c.id} className={`quick-item ${c.risk ? "late" : ""} ${state(c, look)}`} onClick={() => open(c)}>
+              <TypeMark card={c} />
+              {c.title}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

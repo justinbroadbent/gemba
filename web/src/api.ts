@@ -50,6 +50,7 @@ export type Lane = {
   arrivals: number;
   arrivalsUsual: number;
   queue: Card[];
+  quick: Card[];
   doing: Card[];
   done: Card[];
   quickDone: number;
@@ -61,11 +62,12 @@ export type Floor = {
   lanes: Lane[];
 };
 
-export type CellOutlook = { id: string; name: string; queued: number; free: number; back: string; front: string };
+export type CellOutlook = { id: string; name: string; queued: number; quick: number; free: number; back: string; front: string };
 export type Lead = { login: string; name: string; since: string; days: number };
 export type Inbox = {
   fastLane: number;
   targetHours: number;
+  quickDays: number;
   late: number;
   rows: { card: Card; why: string; urgent: boolean; priority?: string; waiting: string; late: boolean }[];
   cells: CellOutlook[];
@@ -124,6 +126,7 @@ export type Mine = {
   full: boolean;
   doing: Card[];
   next: { card: Card; position: number; above: boolean }[];
+  quick: Card[];
   cell?: string;
   priorities: string[];
   editUrl?: string;

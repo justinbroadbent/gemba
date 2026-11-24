@@ -1698,3 +1698,45 @@ button.rows-title:hover:not(:disabled) {
     display: none;
   }
 }
+
+/* ---- the quick list ---- */
+
+.quick {
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--rule);
+}
+.quick ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.quick-item,
+.quick-item:hover:not(:disabled) {
+  min-height: 0;
+  padding: 5px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px dashed var(--muted);
+  border-radius: 14px;
+  font-weight: 400;
+  font-size: 13px;
+  text-align: left;
+}
+.quick-item:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--ink);
+}
+.quick-item.late {
+  border-color: var(--warn);
+  border-style: solid;
+}
+.quick-item.dim {
+  opacity: 0.3;
+}
+.after-why.warn {
+  color: var(--warn);
+  font-weight: 600;
+}

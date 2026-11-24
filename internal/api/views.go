@@ -152,6 +152,20 @@ func starts(wait time.Duration, known bool) string {
 	}
 }
 
+// quick describes a lane's quick list: how long each has waited, and whether
+// that is longer than a quick job should.
+func (v view) quick(items []store.Item) []card {
+	cards := v.cards(items)
+	for n, i := range items {
+		wait := v.now.Sub(i.Created)
+		cards[n].Reason = "Quick: for anyone with a spare half hour. Waiting " + flow.Span(wait)
+		if wait > time.Duration(v.ws.Policies.QuickDays*24*float64(time.Hour)) {
+			cards[n].Risk = "Marked quick, but it has waited " + flow.Span(wait)
+		}
+	}
+	return cards
+}
+
 type laneView struct {
 	Cell          config.Cell  `json:"cell"`
 	Throughput    float64      `json:"throughput"`
@@ -165,6 +179,7 @@ type laneView struct {
 	Arrivals      int          `json:"arrivals"`      // unplanned arrivals this week
 	ArrivalsUsual float64      `json:"arrivalsUsual"` // and in a usual week
 	Queue         []card       `json:"queue"`
+	Quick         []card       `json:"quick"`
 	Doing         []card       `json:"doing"`
 	Done          []card       `json:"done"`
 	QuickDone     int          `json:"quickDone"`
@@ -175,7 +190,7 @@ func (v view) lane(l flow.Lane, items []store.Item) laneView {
 		Cell: l.Cell, Throughput: l.Throughput, QuickRate: l.QuickRate, Measured: l.Measured,
 		Line: l.Line, WIPLimit: l.WIPLimit, QuickDone: l.QuickDone, Hands: []handView{},
 		Mix:   flow.Mix(items, v.ws, l.Cell.ID, v.now),
-		Queue: v.queue(l), Doing: v.cards(l.Doing), Done: v.cards(l.Done),
+		Queue: v.queue(l), Quick: v.quick(l.Quick), Doing: v.cards(l.Doing), Done: v.cards(l.Done),
 	}
 	out.Arrivals, out.ArrivalsUsual = flow.Arrivals(items, v.ws, l.Cell.ID, v.now)
 	pulls := flow.Pulls(l)
@@ -265,6 +280,7 @@ type cellOutlook struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Queued int    `json:"queued"`
+	Quick  int    `json:"quick"` // on the quick list
 	Free   int    `json:"free"`  // free hands
 	Back   string `json:"back"`  // when the back of the queue is likely to start
 	Front  string `json:"front"` // and the front
@@ -273,6 +289,7 @@ type cellOutlook struct {
 type inboxView struct {
 	FastLane    int           `json:"fastLane"`
 	TargetHours float64       `json:"targetHours"`
+	QuickDays   float64       `json:"quickDays"`
 	Late        int           `json:"late"`
 	Rows        []triageRow   `json:"rows"`
 	Cells       []cellOutlook `json:"cells"`
@@ -285,7 +302,7 @@ type inboxView struct {
 
 func inboxOf(items []store.Item, ws *config.Workspace, now time.Time) inboxView {
 	v := newView(items, ws, now)
-	out := inboxView{FastLane: flow.FastLane(items, ws, now), TargetHours: ws.Policies.TriageAfterHours,
+	out := inboxView{FastLane: flow.FastLane(items, ws, now), TargetHours: ws.Policies.TriageAfterHours, QuickDays: ws.Policies.QuickDays,
 		Rows: []triageRow{}, People: []personView{}}
 	for _, t := range flow.Inbox(items, ws, now) {
 		age := now.Sub(t.Item.Created)
@@ -299,7 +316,7 @@ func inboxOf(items []store.Item, ws *config.Workspace, now time.Time) inboxView 
 	}
 	for _, c := range ws.Cells {
 		l := flow.BuildLane(items, ws, c, now)
-		o := cellOutlook{ID: c.ID, Name: c.Name, Queued: len(l.Queue), Free: max(0, l.WIPLimit-len(l.Doing))}
+		o := cellOutlook{ID: c.ID, Name: c.Name, Queued: len(l.Queue), Quick: len(l.Quick), Free: max(0, l.WIPLimit-len(l.Doing))}
 		o.Back = starts(flow.Wait(l, len(l.Queue)))
 		o.Front = starts(flow.Wait(l, 0))
 		out.Cells = append(out.Cells, o)
@@ -406,6 +423,7 @@ type mineView struct {
 	Full       bool         `json:"full"`
 	Doing      []card       `json:"doing"`
 	Next       []nextView   `json:"next"`
+	Quick      []card       `json:"quick"` // the cell's quick list
 	Cell       string       `json:"cell,omitempty"`
 	Priorities []string     `json:"priorities"`
 	EditURL    string       `json:"editUrl,omitempty"` // where a manager changes the priorities
@@ -415,7 +433,7 @@ type mineView struct {
 
 func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, now time.Time) mineView {
 	v := newView(items, ws, now)
-	out := mineView{People: []personView{}, Doing: []card{}, Next: []nextView{}, Priorities: lines(priorities)}
+	out := mineView{People: []personView{}, Doing: []card{}, Next: []nextView{}, Quick: []card{}, Priorities: lines(priorities)}
 	for _, p := range ws.People {
 		out.People = append(out.People, personView{Login: p.Login, Name: p.Name, Limit: p.WIPLimit})
 	}
@@ -427,6 +445,11 @@ func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, 
 	out.Person = &personView{person.Login, person.Name, len(m.Doing), person.WIPLimit}
 	described := map[int]card{}
 	if c := ws.Cell(person.Cell); c != nil {
+		for _, qc := range v.quick(flow.Quick(items, c.ID)) {
+			if (qc.Owner == "" || qc.Owner == person.Name) && len(out.Quick) < 5 {
+				out.Quick = append(out.Quick, qc)
+			}
+		}
 		for _, qc := range v.queue(flow.BuildLane(items, ws, *c, now)) {
 			described[qc.ID] = qc
 		}

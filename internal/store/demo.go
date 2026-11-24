@@ -263,6 +263,12 @@ func NewDemo(cells []DemoCell, throughputWeeks int, now time.Time) *DemoStore {
 	for n := 0; n < 2; n++ { // planned work nobody has queued yet
 		add("", any(), now.Add(-48*time.Hour), nil)
 	}
+	for n, c := range cells { // small jobs on each cell's quick list
+		for k := 0; k <= n%2+1; k++ {
+			age := time.Duration(5+k*30+n*7) * time.Hour
+			add(c.ID, c.ID, now.Add(-age), func(i *Item) { i.Mirrored, i.ExtPriority, i.COS = true, "low", "quick" })
+		}
+	}
 	return s
 }
 

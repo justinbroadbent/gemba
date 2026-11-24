@@ -185,6 +185,13 @@ func Attention(items []store.Item, ws *config.Workspace, norms Norms, now time.T
 		c := ws.Cell(CellOf(i, ws))
 		add("stop", text, *c, &i)
 	}
+	for _, l := range lanes { // quick jobs that nobody has found the half hour for
+		for n := range l.Quick {
+			if i := l.Quick[n]; now.Sub(i.Created) > hours(ws.Policies.QuickDays*24) {
+				add("warn", fmt.Sprintf("Quick, but waiting %s: %s", Span(now.Sub(i.Created)), i.Title), l.Cell, &i)
+			}
+		}
+	}
 	for _, l := range lanes {
 		if l.WIPLimit > 0 && len(l.Doing) > l.WIPLimit {
 			add("warn", fmt.Sprintf("%s has %d in progress against a limit of %d: finish something before starting more",
