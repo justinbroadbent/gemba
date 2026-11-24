@@ -87,9 +87,9 @@ type Policies struct {
 	UrgentPriorities []string `yaml:"urgent_priorities"`
 	AgingDays        float64  `yaml:"aging_days"`
 	QuietDays        float64  `yaml:"quiet_days"`
-	QuickDays        float64  `yaml:"quick_days"`
+	QuickDays        float64  `yaml:"quick_days"`    // a quick item waiting longer than this needs attention
 	WaitingDays      float64  `yaml:"waiting_days"`  // waiting longer than this: time to chase
-	WaitingLimit     int      `yaml:"waiting_limit"` // how many items one person may have waiting // a quick item waiting longer than this needs attention
+	WaitingLimit     int      `yaml:"waiting_limit"` // how many items one person may have waiting
 	ThroughputWeeks  int      `yaml:"throughput_weeks"`
 	HorizonWeeks     int      `yaml:"horizon_weeks"`
 }

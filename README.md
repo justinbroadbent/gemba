@@ -1,5 +1,7 @@
 # Gemba
 
+> Continuing development? Start with [docs/HANDOFF.md](docs/HANDOFF.md): what this is, how it is built, what GitHub must provide, and what is left to do.
+
 A lean flow board for operations teams, layered on top of GitHub Issues and Projects.
 
 GitHub stays the system of record, and people keep working items where they live: planned
