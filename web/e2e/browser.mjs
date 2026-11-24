@@ -201,9 +201,38 @@ try {
     expect(page.url().includes("as="), "one person's review has its own address");
   });
 
-  await check("check now reloads the page in view", async () => {
+  await check("check now says so when nothing is new", async () => {
     await page.getByRole("button", { name: "Check now" }).click();
+    await page.waitForSelector(".toast", { timeout: 5000 });
+    expect((await page.locator(".toast").first().innerText()).includes("Nothing new"), "a toast reports the result");
     await page.waitForSelector(".tiles");
+  });
+
+  await check("a change made elsewhere is announced, and your own is not", async () => {
+    const floor = await fetch(`${BASE}/api/w/${ws}/floor`).then((r) => r.json());
+    const person = floor.lanes.flatMap((l) => l.hands).find((h) => h.items.some((c) => !c.mirrored && !c.blocked));
+    const item = person.items.find((c) => !c.mirrored && !c.blocked);
+    await go(`${w}/now?as=${person.login}`, ".hands");
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [`gemba:${ws}:me`, person.login]);
+    await go(`${w}/now?as=${person.login}`, ".hands");
+    await page.locator(".toast-close").first().click({ timeout: 1000 }).catch(() => {});
+
+    // Their own change, made in this browser: no toast.
+    await page.locator(".park").first().click();
+    await page.locator(".park-form input").fill("a reply");
+    await page.getByRole("button", { name: "Set aside" }).click();
+    await page.waitForSelector(".waiting-row");
+    await page.getByRole("button", { name: "Check now" }).click();
+    await page.waitForSelector(".toast");
+    expect((await page.locator(".toast").allInnerTexts()).every((t) => t.includes("Nothing new")), "your own change is not announced to you");
+    const parked = await page.locator(".waiting-row .after-title").first().innerText();
+
+    // Someone else takes it back for them, outside this browser: a toast.
+    const waiting = await fetch(`${BASE}/api/w/${ws}/mine?as=${person.login}`).then((r) => r.json());
+    const id = waiting.waiting.find((c) => parked.includes(c.title))?.id ?? item.id;
+    await fetch(`${BASE}/api/w/${ws}/items/${id}/resume`, { method: "POST", headers: { "X-Gemba": "1", "Content-Type": "application/json" }, body: "{}" });
+    await page.getByRole("button", { name: "Check now" }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("Now in your hands")), null, { timeout: 5000 });
   });
 
   await check("no page threw a script error", async () => {

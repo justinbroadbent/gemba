@@ -181,12 +181,16 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const get = <T,>(path: string) => call<T>(path);
 
-export const post = <T,>(path: string, body: unknown) =>
-  call<T>(path, {
+export const post = async <T,>(path: string, body: unknown) => {
+  const out = await call<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Gemba": "1" },
     body: JSON.stringify(body),
   });
+  // Tell the change watcher this browser made a change, so it is not announced back to its author.
+  if (!path.endsWith("/refresh")) window.dispatchEvent(new Event("gemba:wrote"));
+  return out;
+};
 
 /** Loads a path, reloads on demand, and optionally refreshes while the tab is visible. */
 export function useData<T>(path: string | null, pollMs = 0) {

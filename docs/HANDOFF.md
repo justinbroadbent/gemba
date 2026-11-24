@@ -81,6 +81,14 @@ progress, classes of service, and showing exceptions, not inventory.
 
 Any item anywhere opens a side panel with a button to the ticket or issue.
 
+**Toasts.** Every 30 seconds, and on "Check now", the browser fetches a small
+pulse and compares it with the last one. New triage items, and changes to the
+viewer's own hands, waiting items or next item, are announced in a toast. A
+change made from the same browser resets the comparison silently, so nobody is
+told about what they just did. Nothing is stored on the server for this, so a
+change the viewer makes directly in GitHub is announced to them like any other,
+and nothing is announced while the app is closed (`web/src/Toasts.tsx`).
+
 ## 4. How it is built
 
 - **Backend:** Go 1.24, standard library HTTP server, one dependency
@@ -358,6 +366,7 @@ All JSON. View models are shaped for the pages; see `web/src/api.ts` for types.
 | `POST /api/w/{ws}/tradeoff` | manager | `{item, cell, pause, authorizedBy}` |
 | `POST /api/w/{ws}/items/{id}/wait` | holder or manager | `{on}` |
 | `POST /api/w/{ws}/items/{id}/resume` | holder or manager | `{}` |
+| `GET /api/w/{ws}/pulse?as={login}` | reader | The little a browser needs to notice change: triage ids, and one person's hands, waiting items and next item |
 | `POST /api/w/{ws}/refresh` | team | Forget cached items so the next read goes to GitHub |
 | `GET /api/w/{ws}/review?days=&as=` | reader | Look-back for the team or one person; 7 to 731 days |
 

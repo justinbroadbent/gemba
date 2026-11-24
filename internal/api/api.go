@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
 	mux.HandleFunc("POST /api/w/{ws}/items/{id}/wait", s.in(toTriage, s.wait))
 	mux.HandleFunc("POST /api/w/{ws}/items/{id}/resume", s.in(toTriage, s.resume))
+	mux.HandleFunc("GET /api/w/{ws}/pulse", s.in(toRead, s.pulse))
 	mux.HandleFunc("POST /api/w/{ws}/refresh", s.in(toTriage, s.refresh))
 	mux.HandleFunc("GET /api/w/{ws}/review", s.in(toRead, s.review))
 	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(toRead, s.tradeoff))
@@ -339,6 +340,48 @@ func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 	}
 	s.audit(q, "triage", "item", id, "cell", in.Cell, "cos", in.COS, "kind", in.Kind, "top", in.Top)
 	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// pulse is the little a browser needs to notice change: what is waiting for
+// triage, and what one person holds, has parked and would pull next. The
+// browser compares one pulse with the last and announces the difference.
+func (s *Server) pulse(w http.ResponseWriter, r *http.Request, q *request) {
+	items, err := q.store.Items(r.Context())
+	if err != nil {
+		s.storeError(w, q, err)
+		return
+	}
+	type ref struct {
+		ID    int    `json:"id"`
+		Title string `json:"title"`
+	}
+	out := struct {
+		As      string `json:"as"`
+		Triage  []ref  `json:"triage"`
+		Doing   []ref  `json:"doing"`
+		Waiting []ref  `json:"waiting"`
+		Next    *ref   `json:"next"`
+	}{Triage: []ref{}, Doing: []ref{}, Waiting: []ref{}}
+	for _, row := range inboxOf(items, q.ws, q.now).Rows {
+		out.Triage = append(out.Triage, ref{row.Card.ID, row.Card.Title})
+	}
+	login := r.URL.Query().Get("as")
+	if login == "" {
+		login = q.can.login
+	}
+	if mine := mineOf(items, q.ws, login, "", q.now); mine.Person != nil {
+		out.As = mine.Person.Login
+		for _, c := range mine.Doing {
+			out.Doing = append(out.Doing, ref{c.ID, c.Title})
+		}
+		for _, c := range mine.Waiting {
+			out.Waiting = append(out.Waiting, ref{c.ID, c.Title})
+		}
+		if len(mine.Next) > 0 {
+			out.Next = &ref{mine.Next[0].Card.ID, mine.Next[0].Card.Title}
+		}
+	}
+	writeJSON(w, 200, out)
 }
 
 // refresh drops what Gemba remembers of the work items, so the next read goes

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } fro
 import { type Card, type Session, type Workspace, post, useData } from "./api";
 import { Detail, DetailContext } from "./Detail";
 import { Logo } from "./Logo";
+import { Toasts, useWatch } from "./Toasts";
 import { FloorPage } from "./pages/Floor";
 import { NowPage } from "./pages/Now";
 import { ProjectsPage } from "./pages/Projects";
@@ -87,6 +88,24 @@ export function App() {
   }
 
   return (
+    <Shell session={session} ws={ws} page={page} go={go} detail={detail} setDetail={setDetail} close={close} round={round} setRound={setRound} />
+  );
+}
+
+function Shell(props: {
+  session: Session;
+  ws: Workspace;
+  page: string;
+  go: Go;
+  detail: Card | null;
+  setDetail: (c: Card | null) => void;
+  close: () => void;
+  round: number;
+  setRound: (fn: (n: number) => number) => void;
+}) {
+  const { session, ws, page, go, detail, setDetail, close, round, setRound } = props;
+  const watch = useWatch(ws);
+  return (
     <DetailContext.Provider value={setDetail}>
       <style>{themeCss(session.theme)}</style>
       <header className="top">
@@ -119,6 +138,7 @@ export function App() {
             title="Read the work items again now, without waiting for the next refresh"
             onClick={async () => {
               await post(`/api/w/${ws.slug}/refresh`, {}).catch(() => {});
+              await watch.look("asked");
               setRound((n) => n + 1);
             }}
           >
@@ -134,6 +154,7 @@ export function App() {
         <Page page={page} ws={ws} session={session} go={go} />
       </main>
       {detail && <Detail card={detail} close={close} />}
+      <Toasts toasts={watch.toasts} dismiss={watch.dismiss} go={go} />
     </DetailContext.Provider>
   );
 }
