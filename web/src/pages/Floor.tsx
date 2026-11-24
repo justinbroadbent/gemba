@@ -40,6 +40,11 @@ export function FloorPage({ ws, go }: { ws: Workspace; go: Go }) {
 
   return (
     <>
+      {data.problems?.map((p, n) => (
+        <p key={n} className="notice warn">
+          Setup: {p}
+        </p>
+      ))}
       <section className="attention" aria-label="Needs attention">
         <h1>{data.attention.length === 0 ? "Nothing needs attention" : "Needs attention"}</h1>
         {data.attention.length === 0 && <p className="lede">Everything in progress is moving, and no date is at risk.</p>}

@@ -1,3 +1,8 @@
+# The deployment config for a GitHub workspace. Cells, kinds of work and people
+# can be left out: they come from the project's fields, its GitHub teams and
+# the team's settings file (see examples/gemba.yml and docs/HANDOFF.md section 8).
+# Listing them here pins them and overrides GitHub.
+
 # Example: one workspace backed by a real GitHub project.
 #
 # Run with:

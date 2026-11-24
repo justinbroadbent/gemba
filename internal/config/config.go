@@ -57,6 +57,11 @@ type Workspace struct {
 	Notify     Notify   `yaml:"notify"`
 	Managers   []string `yaml:"managers"`
 	Members    []string `yaml:"members"`
+
+	// Problems lists what could not be honoured when the workspace was put
+	// together from its sources. Managers are shown it.
+	Problems    []string `yaml:"-"`
+	kindsPinned bool     // the deployment config lists the kinds, so the project does not decide them
 }
 
 // Notify says where decisions are announced. Optional.
@@ -133,7 +138,9 @@ type GitHub struct {
 	ProjectField    string `yaml:"project_field"`     // text or single select: the project's name
 	ProjectURLField string `yaml:"project_url_field"` // text: a link to the project, such as its epic
 	// PrioritiesIssue is the number of an issue whose body states the current priorities.
-	PrioritiesIssue int `yaml:"priorities_issue"`
+	// SettingsPath is the team's settings file in the repository. Default .gemba.yml.
+	SettingsPath    string `yaml:"settings_path"`
+	PrioritiesIssue int    `yaml:"priorities_issue"`
 	// TriageIssue is the number of an issue whose assignee is this week's triage
 	// lead. Gemba changes that assignee when a manager hands the role over.
 	TriageIssue int `yaml:"triage_issue"`
@@ -286,41 +293,19 @@ func (w *Workspace) normalise(d Policies) error {
 	if p.HorizonWeeks <= 0 {
 		p.HorizonWeeks = d.HorizonWeeks
 	}
-	if len(w.Cells) == 0 {
+	// A demo floor is described here in full. A GitHub workspace may leave
+	// cells, kinds and people out and let the project and its settings file say.
+	if len(w.Cells) == 0 && w.Store != "github" {
 		return fmt.Errorf("at least one cell is required")
 	}
-	if w.Kinds == nil {
-		w.Kinds = []Kind{
-			{ID: "enterprise", Name: "Enterprise project", Label: "enterprise-project", Project: true},
-			{ID: "department", Name: "Department project", Label: "department-project", Project: true},
-			{ID: "maintenance", Name: "Maintenance", Label: "maintenance"},
-		}
-	}
-	icons := map[string]string{"enterprise": "tower", "department": "house", "maintenance": "wrench"}
-	for i := range w.Kinds {
-		if w.Kinds[i].Icon == "" {
-			w.Kinds[i].Icon = icons[w.Kinds[i].ID] // unknown kinds get a plain mark
-		}
-		if w.Kinds[i].Name == "" {
-			w.Kinds[i].Name = w.Kinds[i].ID
-		}
-	}
-	for i := range w.Cells {
-		if w.Cells[i].Name == "" {
-			w.Cells[i].Name = w.Cells[i].ID
-		}
-	}
+	w.kindsPinned = w.Kinds != nil
 	for i := range w.People {
-		person := &w.People[i]
-		if w.Cell(person.Cell) == nil {
+		if person := &w.People[i]; w.Cell(person.Cell) == nil && len(w.Cells) > 0 {
 			return fmt.Errorf("%s is in unknown cell %q", person.Login, person.Cell)
 		}
-		if person.Name == "" {
-			person.Name = person.Login
-		}
-		if person.WIPLimit <= 0 {
-			person.WIPLimit = p.DefaultWIPLimit
-		}
+	}
+	if w.Store != "github" {
+		w.finish()
 	}
 	for i, m := range w.Managers {
 		w.Managers[i] = strings.ToLower(m)
@@ -357,6 +342,7 @@ func (w *Workspace) normalise(d Policies) error {
 		def(&g.KindField, "Work type")
 		def(&g.ProjectField, "Project")
 		def(&g.ProjectURLField, "Project URL")
+		def(&g.SettingsPath, ".gemba.yml")
 		if g.InProgressStatus == nil {
 			g.InProgressStatus = []string{"In Progress"}
 		}

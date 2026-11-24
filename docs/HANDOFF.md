@@ -76,7 +76,7 @@ progress, classes of service, and showing exceptions, not inventory.
 | Queues | `/w/{ws}/queues` | Planning | The full ranked queues, searchable, folded past the capacity line. |
 | Projects | `/w/{ws}/projects` | Planning, reporting | Roll-up per project with progress and a pace-based forecast. |
 | Triage | `/w/{ws}/triage` | Everyone; the lead answers for it | Tickets and planned work awaiting a decision, filter by type, batch-queue a project's new issues, name the triage lead. |
-| Trade-off | `/w/{ws}/tradeoff` | Manager with their own manager | Shows what a new priority displaces, and records the decision as comments on the affected issues. |
+| Trade-off | `/w/{ws}/tradeoff` | Manager with their own manager | Search for the new priority; see how many items move back and by how much, which dates it puts at risk, and what stopping each piece of work in progress would cost; record the decision as comments on the affected issues. |
 | Review | `/w/{ws}/review` | Planning, reporting upward, one-to-ones | What was finished over a period, for the team or one person. Facts and links only. |
 
 Any item anywhere opens a side panel with a button to the ticket or issue.
@@ -130,6 +130,8 @@ against Teams. Per-person chat messages would need the same server-side watcher.
 cmd/gemba/          the server: loads config, builds a store per workspace, serves
 cmd/seedgithub/     fills a GitHub test project with fictional issues
 internal/config/    config types, defaults, validation; default.yml is the built-in demo config
+  settings.go         the team's settings file, and Resolve, which puts the three sources together
+internal/notify/    chat announcements (a stub; see section 3)
 internal/store/     the contract with wherever items live
   store.go            Item, Change, Store, and the optional Rota and Prioritizer interfaces
   github.go           GitHub Projects v2 over GraphQL, with a short read cache
@@ -145,7 +147,8 @@ internal/api/       HTTP routes, access control, view models
 web/src/            the React app; pages/ has one file per page
 web/e2e/            browser tests
 e2e/                tests against a real GitHub project
-examples/github.yml annotated example of a GitHub workspace config
+examples/github.yml annotated example of a GitHub workspace in the deployment config
+examples/gemba.yml  annotated example of the team's settings file
 ```
 
 ### Design rules in the code
@@ -218,6 +221,8 @@ case-insensitively**; every name below is a default that config can change.
 | Source URL | Text | Link to the ticket | For mirrored tickets |
 
 Notes:
+- The options of Cell and Work type **are** the team's cells and kinds of
+  work; adding an option adds a cell or a kind (section 8).
 - Class of service options are matched by lower-casing and replacing spaces
   with hyphens, so `Fixed date` is `fixed-date`.
 - Several status names can map to one state (`in_progress_statuses`,
@@ -235,6 +240,11 @@ Notes:
 | `enterprise-project`, `department-project`, `maintenance` | Fallback for work type when the Work type field is empty. Set per kind in config. |
 
 Gemba reads labels and never changes them.
+
+### The settings file (optional)
+
+`.gemba.yml` at the root of the repository's default branch. See section 8 and
+`examples/gemba.yml`.
 
 ### Two ordinary issues (optional)
 
@@ -306,11 +316,72 @@ All in `internal/flow`. Thresholds are policies in config (defaults shown).
   blocked (longest first); cell over its limit; waiting too long or too many;
   quick and stale; aging; quiet; unusual unplanned arrivals.
 
-## 8. Configuration
+## 8. Where a workspace is described
+
+There is no settings page and no database. A workspace is described in three
+places, each owned by someone different. `config.Workspace.Resolve` in
+`internal/config/settings.go` puts them together, and the GitHub store does so
+on every read, so a change in GitHub shows within the cache time (20 seconds).
+
+| Source | Owner | Says |
+|---|---|---|
+| **GitHub itself** | The team, by using GitHub | Cells: the options of the project's Cell field. Kinds of work: the options of the Work type field. People: the members of the GitHub teams the settings file names. |
+| **Settings file** `.gemba.yml` in the work-items repository | The team's manager, editing in GitHub | Which team works in which cell; per-person limits and sign-in names; people not in a team; icons for kinds; limits and thresholds. |
+| **Deployment config** (`GEMBA_CONFIG`) | Whoever deploys Gemba | Which repository and project; who may get in and who is a manager; brand and colours; field names if they differ from the defaults. |
+
+Rules:
+
+- **Everything in the settings file is optional.** With no file, cells and
+  kinds still come from the project and the floor loads; only people are
+  missing.
+- **The settings file cannot grant access.** `managers` and `members` exist
+  only in the deployment config, and an unknown key in the settings file is an
+  error. This is deliberate: anyone who can commit to the repository can edit
+  the file. Do not move access into it. If the file should be change-controlled,
+  protect it with a CODEOWNERS rule in that repository.
+- **A mistake never takes the floor down.** A file that does not parse is
+  ignored whole. A reference that cannot be honoured (a team that does not
+  exist, a person in a cell that does not exist) is skipped. Either way the
+  problem is listed in `Workspace.Problems` and shown to managers at the top of
+  the Floor as "Setup: ...".
+- **Cells and kinds listed in the deployment config are pinned** and override
+  the project. That is how the demo works, and it is an escape hatch; a real
+  workspace should leave them out.
+- **Ids are made from names.** A cell option "Data Services" has id
+  `data-services`; a kind "Enterprise project" has id `enterprise-project`.
+  Renaming an option in GitHub therefore changes the id, which only appears in
+  URLs and API calls.
+- **Icons for kinds are guessed from the name** (enterprise, department,
+  maintenance) and can be set in the settings file.
+
+### People and GitHub Teams
+
+The intended setup is one GitHub team per cell, named in the settings file:
+
+```yaml
+teams:
+  Network: infra-network
+  Platform: infra-platform
+```
+
+Members come from `organization.team.members` (first 100, including child
+teams' members as GitHub reports them). Names come from their profiles, falling
+back to the login. The token needs `read:org`, and must be able to see the
+teams (secret teams are invisible to non-members).
+
+**This path has not been run against a real organisation.** The development
+account is a personal one, which has no teams. It is covered by
+`internal/store/github_test.go` against a stand-in for GitHub that answers the
+same queries. The first job when adopting this is to point it at the real
+organisation and confirm the people appear; if a team cannot be read, the Floor
+will say so. Until teams are set up, list people under `people:` with a `cell`,
+which is proven end to end.
+
+### The deployment config
 
 One YAML file, path in `GEMBA_CONFIG`. With none, the built-in
-`internal/config/default.yml` gives two demo workspaces. `examples/github.yml`
-is an annotated GitHub workspace.
+`internal/config/default.yml` gives two demo workspaces. A real workspace needs
+only this:
 
 ```yaml
 brand: { name: Gemba, logo: path/to/logo.svg }   # logo optional (.svg or .png)
@@ -320,24 +391,28 @@ theme:                                           # optional; hex colours
 workspaces:
   - slug: infra                # in URLs; lower case, digits, hyphens
     name: Infrastructure
-    store: github              # or demo
-    github: { owner, repo, project, priorities_issue, triage_issue, ...field names }
-    cells:  [{ id, name }]
-    kinds:  [{ id, name, label, project: true|false, icon }]
-    people: [{ login, name, cell, wip_limit, signin }]
+    store: github
+    github:
+      owner: your-org
+      repo: work-items
+      project: 1
+      priorities_issue: 12     # optional
+      triage_issue: 13         # optional
+      settings_path: .gemba.yml  # the default
+      # ...field names, only where they differ from the defaults in section 6
     managers: [sign-in names]  # may do everything
-    members:  [sign-in names]  # may read; may triage if also listed in people with a signin
+    members:  [sign-in names]  # may read; may triage if the settings file gives them a signin
     notify: { teams_webhook: "env:TEAMS_WEBHOOK" }   # optional; announces decisions to chat
-    priorities: |              # used when there is no priorities_issue
-      One line per priority.
-    policies: { default_wip_limit, triage_after_hours, urgent_priorities,
-                aging_days, quiet_days, quick_days, waiting_days, waiting_limit,
-                throughput_weeks, horizon_weeks }
+    policies: { ... }          # optional deployment-wide defaults; the settings file overrides them
 ```
 
-- `people[].login` is the GitHub login, used to match assignees.
-- `people[].signin` is the name the sign-in platform reports, used to open the
-  Now page on the right person and to decide who may triage.
+`cells`, `kinds`, `people` and `priorities` may also be given here. The demo
+store needs them, since it has no GitHub to ask.
+
+- A person's `login` is their GitHub login, used to match assignees.
+- A person's `signin` is the name the sign-in platform reports. It opens the
+  Now page on the right person and decides who may triage. It does not make
+  anyone a manager.
 - Icons available for kinds: `tower`, `house`, `wrench`, `flag`, `shield`,
   `dot`. Unplanned always uses `bolt`. Add more in `web/src/TypeIcon.tsx`.
 - `*.local.yml` is ignored by git, for local configs that name real projects.
@@ -346,8 +421,8 @@ workspaces:
 
 | Variable | Purpose |
 |---|---|
-| `GEMBA_CONFIG` | Path to the config file. Empty means the built-in demo. |
-| `GITHUB_TOKEN` | Token for GitHub workspaces. |
+| `GEMBA_CONFIG` | Path to the deployment config. Empty means the built-in demo. |
+| `GITHUB_TOKEN` | Token for GitHub workspaces. Needs the repository's issues and contents (to read the settings file), the project, and `read:org` for teams. |
 | `GEMBA_ADDR` | Listen address. Default `127.0.0.1:8080`; the container sets `0.0.0.0:8080`. |
 | `GEMBA_REQUIRE_AUTH` | `1` refuses any request without a signed-in identity. The container sets it. |
 
@@ -362,7 +437,7 @@ without it gets 401. Without that setting (local use only) the caller is
 | Role | Who | May |
 |---|---|---|
 | Reader | In `members` | See everything in the workspace |
-| Team | A reader who is also in `people` with a matching `signin` | Triage to the back of a queue or the quick list; park and resume their own work; "Check now" |
+| Team | A reader whom the workspace's people list recognises by `signin` | Triage to the back of a queue or the quick list; park and resume their own work; "Check now" |
 | Triage lead | The team member who holds the triage issue | Also expedite and place at the front |
 | Manager | In `managers` | Everything, including reorder, trade-off and naming the lead |
 
@@ -427,11 +502,13 @@ the browser test for any new interaction.
 
 ## 12. What is proven and what is not
 
-**Proven:** the rules (unit tests); every write reaching GitHub (triage with
+**Proven:** the rules (unit tests); cells and kinds read from the project's
+fields and people from the settings file, on a real project; every write reaching GitHub (triage with
 type and date, quick, reorder, waiting and resume, trade-off with pause and
 comment, triage lead); the main interactions in a browser, including dragging.
 
 **Not proven:**
+- People read from GitHub Teams, against a real organisation (section 8).
 - Behaviour with hundreds or thousands of real items. Every read loads the
   whole project.
 - The platform sign-in in a real deployment, and the header being stripped.
@@ -453,9 +530,12 @@ comment, triage lead); the main interactions in a browser, including dragging.
    still on the project. Archiving project items removes them from Review. A
    small store of daily snapshots would fix this; it is the first thing that
    would justify a database, and it must stay derived data that can be rebuilt.
-4. **Sign-in groups.** Managers and members are lists of names in config.
-   Reading group membership from the identity platform would remove that
-   upkeep, as would mapping sign-in names to GitHub logins automatically.
+4. **Access from the identity platform.** Managers and members are still
+   lists of sign-in names in the deployment config, and each person's sign-in
+   name is mapped to their GitHub login by hand in the settings file. Reading
+   group membership from the identity platform would remove the first; an
+   organisation whose GitHub accounts are linked to that platform could supply
+   the second.
 5. **Infrastructure as code** for the intended hosting, and a pipeline that
    runs the three test layers.
 6. **Accessibility pass.** Drag and drop has a keyboard alternative only on
@@ -477,15 +557,20 @@ comment, triage lead); the main interactions in a browser, including dragging.
   warning shows after seven days.
 - Nothing caps the quick list or checks that a quick item was in fact quick.
 - Batch triage sends one request per item and stops at the first failure.
+- Reading the settings file and each team costs one extra GitHub query per
+  cache refresh. Fold this into the webhook work (gap 1).
 - `README.md` and `docs/PLAN.md` predate the triage lead, quick list, waiting
   state and Review page. Bring them up to date or point them here.
 
 ## 15. Adapting it to a real team
 
-1. Create the project fields, options and labels in section 6. Adjust names in
-   config instead of renaming an existing project's fields.
-2. Write the workspace config: cells, people with GitHub logins and sign-in
-   names, managers, members.
+1. Create the project fields, options and labels in section 6. The options of
+   Cell and Work type become the cells and kinds. Adjust field names in the
+   deployment config instead of renaming an existing project's fields.
+2. Write a deployment config with the repository, project, managers and
+   members. Add `.gemba.yml` to the repository from `examples/gemba.yml`: a
+   team per cell, and each person's sign-in name. Open the Floor as a manager
+   and clear anything listed under "Setup".
 3. Extend the ticket sync to meet the contract in section 6.
 4. Create the priorities issue and the triage issue.
 5. Run the GitHub end-to-end test against a copy of the project first.

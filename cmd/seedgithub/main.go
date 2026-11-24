@@ -42,6 +42,9 @@ func main() {
 	}
 	ctx := context.Background()
 	gh := store.NewGitHub(ws, token)
+	if eff, err := gh.Workspace(context.Background()); err == nil {
+		ws = eff // cells come from the project when the config does not list them
+	}
 	g := ws.GitHub
 
 	existing, err := gh.Items(ctx)

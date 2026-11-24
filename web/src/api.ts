@@ -62,6 +62,7 @@ export type Lane = {
 export type Floor = {
   signals: { lead?: string; triage: number; blocked: number; aging: number; over: number };
   attention: Alert[];
+  problems?: string[];
   lanes: Lane[];
 };
 

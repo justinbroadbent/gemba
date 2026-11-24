@@ -1,0 +1,48 @@
+# The team's settings file. Put it at the root of the work-items repository,
+# named .gemba.yml, on the default branch. The team's manager edits it there.
+#
+# Every part is optional. With no file at all, Gemba still shows the floor:
+# cells and kinds of work come from the project's fields, and only people are
+# missing.
+#
+# This file cannot grant access. Who may open the workspace, and who is a
+# manager, is set in the deployment config.
+
+# Cells and kinds of work are NOT listed here. They are the options of the
+# project's "Cell" and "Work type" fields. To add a cell, add an option.
+
+# People, the usual way: one GitHub team per cell. The key is the cell's name
+# (or id); the value is the team's slug in the organisation that owns the
+# project. Members of the team work in that cell.
+teams:
+  Network: infra-network
+  Platform: infra-platform
+  Data Services: infra-data
+
+# People, by GitHub login. Use this for anything a team cannot say:
+#   - a different limit on work in progress ("hands") for one person
+#   - the name the sign-in platform reports for them, so Gemba opens on their
+#     own work and lets them triage
+#   - someone who is not in a team (give their cell)
+people:
+  - { login: rin, wip_limit: 1 }
+  - { login: alex, signin: alex@example.com }
+  - { login: jo, name: Jo Park, cell: Platform }
+
+# Adjust how a kind of work is drawn or treated, by its name on the project.
+# icon: tower, house, wrench, flag, shield or dot.
+# project: true means items of this kind belong to a project.
+kinds:
+  - { name: Maintenance, icon: wrench, project: false }
+
+# Limits and thresholds. Leave any out to keep the deployment's value.
+policies:
+  default_wip_limit: 2      # hands per person, unless overridden above
+  triage_after_hours: 8     # a ticket open this long needs a decision
+  aging_days: 5             # in progress this long is flagged, until there is enough history to measure
+  quiet_days: 3             # in progress with no activity for this long is flagged
+  quick_days: 2             # a quick item waiting this long is flagged
+  waiting_days: 3           # waiting on someone this long: time to chase
+  waiting_limit: 2          # how many items one person may have waiting
+  throughput_weeks: 4       # how far back pace is measured
+  horizon_weeks: 2          # how far ahead the capacity line looks

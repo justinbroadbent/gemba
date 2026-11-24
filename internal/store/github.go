@@ -20,8 +20,7 @@ import (
 // are project fields, mapped by name in the workspace configuration.
 type GitHub struct {
 	cfg   *config.GitHub
-	cells []config.Cell
-	kinds []config.Kind
+	base  *config.Workspace // as the deployment config describes it
 	token string
 
 	Endpoint string        // GraphQL endpoint; override for GitHub Enterprise Server or tests
@@ -29,6 +28,7 @@ type GitHub struct {
 	Client   *http.Client
 
 	mu         sync.Mutex
+	eff        *config.Workspace // base, plus what the project, its teams and its settings file say
 	projectID  string
 	fields     map[string]Field // by lower-case name
 	refs       map[int]ref
@@ -50,7 +50,7 @@ type ref struct{ item, issue string }
 
 func NewGitHub(ws *config.Workspace, token string) *GitHub {
 	return &GitHub{
-		cfg: ws.GitHub, cells: ws.Cells, kinds: ws.Kinds, token: token,
+		cfg: ws.GitHub, base: ws, eff: ws, token: token,
 		Endpoint: "https://api.github.com/graphql",
 		TTL:      20 * time.Second,
 		Client:   &http.Client{Timeout: 30 * time.Second},
@@ -170,6 +170,8 @@ type ghProject struct {
 func (g *GitHub) load(ctx context.Context) error {
 	var (
 		items  []Item
+		nodes  []ghNode
+		found  config.Found
 		refs   = map[int]ref{}
 		fields = map[string]Field{}
 		id     string
@@ -196,22 +198,37 @@ func (g *GitHub) load(ctx context.Context) error {
 				continue
 			}
 			field := Field{ID: f.ID, Name: f.Name, Options: map[string]string{}}
+			names := []string{}
 			for _, o := range f.Options {
 				field.Options[strings.ToLower(o.Name)] = o.ID
+				names = append(names, o.Name)
 			}
 			fields[strings.ToLower(f.Name)] = field
+			switch {
+			case f.Options == nil:
+			case strings.EqualFold(f.Name, g.cfg.CellField):
+				found.Cells = names
+			case strings.EqualFold(f.Name, g.cfg.KindField):
+				found.Kinds = names
+			}
 		}
 		for _, n := range p.Items.Nodes {
 			if n.Content.Number == 0 || strings.ToLower(n.Content.Repository.NameWithOwner) != repo {
 				continue // drafts, pull requests, and issues from other repositories
 			}
-			items = append(items, g.item(n))
+			nodes = append(nodes, n)
 			refs[n.Content.Number] = ref{item: n.ID, issue: n.Content.ID}
 		}
 		if !p.Items.PageInfo.HasNextPage {
 			break
 		}
 		after = p.Items.PageInfo.EndCursor
+	}
+	// Who the team is and how it works, before the items are read against it.
+	g.describe(ctx, &found)
+	g.eff = g.base.Resolve(found)
+	for _, n := range nodes {
+		items = append(items, g.item(n))
 	}
 	priorities := ""
 	if g.cfg.PrioritiesIssue > 0 {
@@ -257,6 +274,71 @@ func (g *GitHub) load(ctx context.Context) error {
 	return nil
 }
 
+// describe reads the team's settings file and the teams it names. Nothing here
+// stops the floor loading: what cannot be read is reported as a problem.
+func (g *GitHub) describe(ctx context.Context, found *config.Found) {
+	problem := func(format string, a ...any) { found.Problems = append(found.Problems, fmt.Sprintf(format, a...)) }
+	var file struct {
+		Repository struct {
+			Object *struct{ Text *string }
+		}
+	}
+	vars := map[string]any{"o": g.cfg.Owner, "r": g.cfg.Repo, "e": "HEAD:" + g.cfg.SettingsPath}
+	if err := g.GraphQL(ctx, `query($o:String!,$r:String!,$e:String!){repository(owner:$o,name:$r){object(expression:$e){... on Blob{text}}}}`, vars, &file); err != nil {
+		problem("The settings file %s could not be read: %v", g.cfg.SettingsPath, err)
+		return
+	}
+	if file.Repository.Object == nil || file.Repository.Object.Text == nil {
+		return // no settings file: the defaults apply
+	}
+	settings, err := config.ParseSettings(*file.Repository.Object.Text)
+	if err != nil {
+		problem("The settings file %s has a mistake and is being ignored: %v", g.cfg.SettingsPath, err)
+		return
+	}
+	found.Settings = settings
+	found.Teams = map[string][]config.Member{}
+	for _, slug := range settings.Teams {
+		if _, done := found.Teams[slug]; done {
+			continue
+		}
+		var out struct {
+			Organization *struct {
+				Team *struct {
+					Members struct {
+						Nodes []struct{ Login, Name string }
+					}
+				}
+			}
+		}
+		err := g.GraphQL(ctx, `query($o:String!,$s:String!){organization(login:$o){team(slug:$s){members(first:100){nodes{login name}}}}}`,
+			map[string]any{"o": g.cfg.Owner, "s": slug}, &out)
+		switch {
+		case err != nil:
+			problem("The team %s could not be read: %v", slug, err)
+		case out.Organization == nil || out.Organization.Team == nil:
+			problem("There is no team called %s in %s, or Gemba may not see it.", slug, g.cfg.Owner)
+		default:
+			members := []config.Member{}
+			for _, m := range out.Organization.Team.Members.Nodes {
+				members = append(members, config.Member{Login: m.Login, Name: m.Name})
+			}
+			found.Teams[slug] = members
+		}
+	}
+}
+
+// Workspace is the workspace as it stands: the deployment config, plus what
+// the project, its teams and its settings file say.
+func (g *GitHub) Workspace(ctx context.Context) (*config.Workspace, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.fresh(ctx); err != nil {
+		return nil, err
+	}
+	return g.eff, nil
+}
+
 func (g *GitHub) item(n ghNode) Item {
 	c := n.Content
 	i := Item{ID: c.Number, Title: c.Title, URL: c.URL, Created: c.CreatedAt, Updated: c.UpdatedAt, Status: StatusOpen}
@@ -284,7 +366,7 @@ func (g *GitHub) item(n ghNode) Item {
 				i.Status, i.Closed = StatusDone, v.UpdatedAt
 			}
 		case is(v, g.cfg.CellField):
-			for _, cell := range g.cells {
+			for _, cell := range g.eff.Cells {
 				if strings.EqualFold(cell.Name, v.Name) || strings.EqualFold(cell.ID, v.Name) {
 					i.Cell = cell.ID
 				}
@@ -309,7 +391,7 @@ func (g *GitHub) item(n ghNode) Item {
 				i.SourceURL = u
 			}
 		case is(v, g.cfg.KindField):
-			for _, k := range g.kinds {
+			for _, k := range g.eff.Kinds {
 				if strings.EqualFold(k.Name, v.Name) || strings.EqualFold(k.ID, v.Name) {
 					i.Kind = k.ID
 				}
@@ -328,7 +410,7 @@ func (g *GitHub) item(n ghNode) Item {
 	}
 	if i.Kind == "" { // no field value: fall back to labels
 		for _, l := range c.Labels.Nodes {
-			for _, k := range g.kinds {
+			for _, k := range g.eff.Kinds {
 				if k.Label != "" && strings.EqualFold(k.Label, l.Name) {
 					i.Kind = k.ID
 				}
@@ -412,7 +494,7 @@ func (g *GitHub) Update(ctx context.Context, id int, c Change) error {
 	cached := &g.cache[at]
 	if c.Cell != nil {
 		name := *c.Cell
-		for _, cell := range g.cells {
+		for _, cell := range g.eff.Cells {
 			if cell.ID == *c.Cell {
 				name = cell.Name
 			}
@@ -424,7 +506,7 @@ func (g *GitHub) Update(ctx context.Context, id int, c Change) error {
 	}
 	if c.Kind != nil {
 		name := *c.Kind
-		for _, k := range g.kinds {
+		for _, k := range g.eff.Kinds {
 			if k.ID == *c.Kind {
 				name = k.Name
 			}

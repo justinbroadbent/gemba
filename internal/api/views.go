@@ -232,6 +232,7 @@ type floorView struct {
 		Over    int    `json:"over"`
 	} `json:"signals"`
 	Attention []flow.Alert `json:"attention"`
+	Problems  []string     `json:"problems,omitempty"` // for managers: setup that could not be honoured
 	Lanes     []laneView   `json:"lanes"`
 }
 

@@ -60,7 +60,13 @@ func setup(t *testing.T) *rig {
 	}
 	token := os.Getenv("GITHUB_TOKEN")
 	r := &rig{t: t, ws: ws, gh: store.NewGitHub(ws, token), raw: store.NewGitHub(ws, token)}
-	r.gh.TTL = 0 // always read GitHub, never Gemba's memory of what it wrote
+	r.gh.TTL = 0                                     // always read GitHub, never Gemba's memory of what it wrote
+	if r.ws, err = r.gh.Workspace(ctx); err != nil { // cells, kinds and people as GitHub describes them
+		t.Fatal(err)
+	}
+	for _, p := range r.ws.Problems {
+		t.Errorf("setup problem: %s", p)
+	}
 	srv := &api.Server{Config: cfg, Stores: map[string]store.Store{slug: r.gh},
 		Now: func() time.Time { return time.Now().UTC() }, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	r.h = srv.Handler()

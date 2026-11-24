@@ -130,6 +130,7 @@ func (s *Server) in(need int, fn func(http.ResponseWriter, *http.Request, *reque
 			fail(w, 404, "No such workspace")
 			return
 		}
+		ws = s.resolve(r.Context(), ws)
 		can := access(ws, who)
 		if !can.read {
 			fail(w, 404, "No such workspace")
@@ -148,6 +149,25 @@ func (s *Server) in(need int, fn func(http.ResponseWriter, *http.Request, *reque
 		}
 		fn(w, r, &request{ws: ws, store: s.Stores[ws.Slug], who: who, can: can, now: s.Now()})
 	}
+}
+
+// resolve returns the workspace as it stands. A store that can describe the
+// team (its cells, kinds, people and settings) adds that to the deployment
+// config. If the store cannot be reached, the deployment config alone is used,
+// and the request then fails or succeeds on its own reading of the store.
+func (s *Server) resolve(ctx context.Context, base *config.Workspace) *config.Workspace {
+	d, ok := s.Stores[base.Slug].(interface {
+		Workspace(context.Context) (*config.Workspace, error)
+	})
+	if !ok {
+		return base
+	}
+	ws, err := d.Workspace(ctx)
+	if err != nil {
+		s.Log.Error("describe workspace", "workspace", base.Slug, "err", err)
+		return base
+	}
+	return ws
 }
 
 func (s *Server) session(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +200,11 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	if s.Logo != nil {
 		out.Brand.Logo = "/api/logo"
 	}
-	for _, ws := range s.Config.Workspaces {
+	for _, base := range s.Config.Workspaces {
+		if can := access(base, who); !can.read {
+			continue // not theirs: do not read its source on their behalf
+		}
+		ws := s.resolve(r.Context(), base)
 		if can := access(ws, who); can.read {
 			out.Workspaces = append(out.Workspaces, workspace{ws.Slug, ws.Name, can.manage, can.team, ws.Cells, ws.Kinds, ws.Policies.HorizonWeeks, can.login})
 		}
@@ -211,6 +235,9 @@ func (s *Server) floor(w http.ResponseWriter, r *http.Request, q *request) {
 		return
 	}
 	out := floorOf(items, q.ws, q.now)
+	if q.can.manage {
+		out.Problems = q.ws.Problems
+	}
 	if l := leadOf(s.lead(r, q), q.ws, q.now); l != nil {
 		out.Signals.Lead = l.Name
 	}
