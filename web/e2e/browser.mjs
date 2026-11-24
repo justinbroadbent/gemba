@@ -136,9 +136,26 @@ try {
     await page.getByRole("button", { name: "Hide them" }).click();
   });
 
-  await check("a manager hands the triage lead to someone else", async () => {
+  await check("the rota: a manager gives a week to someone and reorders the rotation", async () => {
+    await page.getByRole("button", { name: "Rota" }).click();
+    await page.waitForSelector(".rota-weeks li");
+    expect((await page.locator(".rota-weeks li").count()) === 8, "eight weeks are shown");
+    const order = await page.locator(".rota-order .rota-name").allInnerTexts();
+    expect(order.length > 1, "the demo has a rotation");
+    // Next week goes to the last person in the rotation.
+    const pick = page.locator(".rota-weeks li").nth(1).locator("select");
+    await pick.selectOption({ label: order[order.length - 1] });
+    await page.waitForFunction((n) => document.querySelectorAll(".rota-weeks select")[1]?.selectedOptions[0]?.textContent === n, order[order.length - 1], { timeout: 5000 });
+    // And back to the rotation.
+    await page.locator(".rota-weeks li").nth(1).locator("select").selectOption({ index: 0 });
+    // Move the second person to the front.
+    await page.locator(".rota-order li").nth(1).getByRole("button", { name: /earlier/ }).click();
+    await page.waitForFunction((n) => document.querySelector(".rota-order .rota-name")?.textContent === n, order[1], { timeout: 5000 });
+  });
+
+  await check("a manager names a stand-in for the rest of the week", async () => {
     const was = (await page.locator(".lead-name").innerText()).trim();
-    await page.getByRole("button", { name: /Hand over|Name someone/ }).click();
+    await page.getByRole("button", { name: /Stand-in|Name someone/ }).click();
     const options = await page.locator('select[aria-label="Triage lead"] option:not([disabled])').allInnerTexts();
     const next = options.find((o) => o.trim() !== was);
     await page.locator('select[aria-label="Triage lead"]').selectOption({ label: next });
@@ -163,6 +180,23 @@ try {
   await check("now: the page says what to pull next and lists the quick ones", async () => {
     expect((await page.locator(".next h3").count()) === 1, "one thing to pull next");
     expect((await page.locator(".next-why").innerText()).trim().length > 0, "with the reason it is next");
+  });
+
+  await check("standup: steps through the team one person at a time", async () => {
+    await go(`${w}/floor`, ".room");
+    await page.getByRole("link", { name: "Start standup" }).click();
+    await page.waitForSelector(".standup-main h1");
+    const people = await page.locator(".standup-who li").count();
+    const first = (await page.locator(".standup-main h1").innerText()).trim();
+    expect((await page.locator(".standup-who a.on").innerText()).includes(first), "the person in view is marked in the list");
+    expect((await page.locator(".standup-block").count()) >= 2, "in hand and finished are shown");
+    await page.keyboard.press("ArrowRight");
+    await page.waitForFunction((n) => document.querySelector(".standup-main h1")?.textContent?.trim() !== n, first, { timeout: 5000 });
+    expect(page.url().includes("at="), "each step has its own address");
+    await page.locator(".standup-who ol a").nth(people - 1).click();
+    await page.waitForFunction(() => document.querySelector(".standup-step a.button:last-child")?.textContent?.trim() === "Finish", null, { timeout: 5000 });
+    await page.locator(".standup-step").getByRole("link", { name: "Finish" }).click();
+    await page.waitForSelector(".room");
   });
 
   await check("queues: search narrows the list", async () => {

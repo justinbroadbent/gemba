@@ -65,14 +65,15 @@ progress, classes of service, and showing exceptions, not inventory.
 | Capacity line | How many queued items fit in the planning horizon at the measured pace. |
 | Waiting | Started, then parked until someone else acts. Frees the hand; limited per person. |
 | Blocked | In progress and cannot move; needs help. Holds the hand; flagged at once. |
-| Triage lead | The one person answerable for triage this week. Holds delegated authority to expedite. |
+| Triage lead | The one person answerable for triage this week. Holds delegated authority to expedite. Decided by the rota. |
+| Rota | The triage schedule: a rotation taking a week each, weeks given to a named person, and a stand-in for the rest of the current week. |
 
 ## 3. Pages
 
 | Page | Route | For | What it does |
 |---|---|---|---|
 | Now | `/w/{ws}/now` | Each engineer | Hands, waiting items, the one thing to pull next with its reason, what comes after, the cell's quick list, the team's priorities. Park and resume your own work here. |
-| Floor | `/w/{ws}/floor` | Standup | Attention sentences, then a room per cell: a mat per person, the quick list, the line (drag to reorder), where finished work went. |
+| Floor | `/w/{ws}/floor` | Standup | "Start standup" steps through the team one person at a time (`?standup=1&at=login`): in hand, in the way, finished since the last standup, waiting, next. Read-only, open to everyone. Otherwise:  Attention sentences, then a room per cell: a mat per person, the quick list, the line (drag to reorder), where finished work went. |
 | Queues | `/w/{ws}/queues` | Planning | The full ranked queues, searchable, folded past the capacity line. |
 | Projects | `/w/{ws}/projects` | Planning, reporting | Roll-up per project with progress and a pace-based forecast. |
 | Triage | `/w/{ws}/triage` | Everyone; the lead answers for it | Tickets and planned work awaiting a decision, filter by type, batch-queue a project's new issues, name the triage lead. |
@@ -104,6 +105,22 @@ system (the browser's Notification API) while the viewer is looking elsewhere.
 The tab must stay open, and the site must be served over HTTPS (or localhost).
 Notifying people when the app is closed needs a server-side watcher and a push
 channel; that is not built.
+
+**The triage rota.** Who leads triage is worked out each time it is asked, in
+`internal/flow/rota.go`; nothing rolls over on a timer. In order:
+
+1. a stand-in: whoever was assigned the triage issue during the current week
+   (the "Stand-in" button, or assigning the issue in GitHub);
+2. a named week: a week the manager gave to one person, for example to cover
+   leave;
+3. the rotation: an ordered list of people taking a week each, Monday to
+   Sunday (UTC).
+
+The rotation and named weeks are kept as a small YAML block in the body of the
+triage issue, written by Gemba and editable by hand. The time of a stand-in is
+the issue's last "assigned" event. With no schedule, the lead is simply the
+issue's assignee, as before. Managers edit the rota on the Triage page;
+everyone can see the next eight weeks.
 
 **Chat.** `internal/notify` is a stub for chat integration. With
 `notify.teams_webhook` set on a workspace (use `env:NAME` to keep the address
@@ -187,7 +204,7 @@ overwriting each other.
 | Due | Engineers; Gemba at triage of fixed-date work that has none | reads; writes once |
 | Waiting on | Gemba, for non-mirrored items | writes |
 | Comments | Gemba adds one per trade-off decision | appends |
-| Triage issue assignee | Gemba | writes |
+| Triage issue assignee and body | Gemba (the stand-in and the rota) | writes |
 
 **Status writes, never on a mirrored item:**
 - back to the open status when a trade-off pauses work in progress;
@@ -251,7 +268,7 @@ Gemba reads labels and never changes them.
 | Config key | What it is |
 |---|---|
 | `priorities_issue` | An issue whose body is the team's current priorities, one per line. Edited in GitHub. |
-| `triage_issue` | An issue whose assignee is this week's triage lead. Gemba reassigns it on hand-over. |
+| `triage_issue` | Holds the triage rota. Its body carries the schedule (rotation and named weeks); its assignee is the stand-in for the current week. Gemba writes both. |
 
 Neither needs to be on the project.
 
@@ -458,7 +475,8 @@ All JSON. View models are shaped for the pages; see `web/src/api.ts` for types.
 | `GET /api/w/{ws}/mine?as={login}` | reader | One person's page |
 | `GET /api/w/{ws}/inbox` | reader | Triage rows, fresh tickets, cell outlooks, the lead |
 | `POST /api/w/{ws}/inbox/{id}` | team | Triage: `{cell, cos, kind, top, due}` |
-| `POST /api/w/{ws}/triage-lead` | manager | `{login}` |
+| `POST /api/w/{ws}/triage-lead` | manager | `{login}`: a stand-in for the rest of this week |
+| `POST /api/w/{ws}/triage-rota` | manager | `{rotation: [logins], weeks: {"2026-12-07": login}}`; either part optional, an empty login returns a week to the rotation |
 | `POST /api/w/{ws}/queues/{cell}/move` | manager | `{id, before}`; `before: null` means the end |
 | `GET /api/w/{ws}/projects` | reader | Project roll-ups |
 | `GET /api/w/{ws}/tradeoff?item=&cell=` | reader | Candidates and a preview of the cost |
@@ -553,8 +571,7 @@ comment, triage lead); the main interactions in a browser, including dragging.
   late in the day.
 - For GitHub items, "started" is when the Status field last changed. An item
   that was set to waiting and taken back looks freshly started.
-- The triage lead is "this week's" by convention only. Nothing rotates it; a
-  warning shows after seven days.
+- Rota weeks run Monday to Sunday in UTC, not the team's own time zone.
 - Nothing caps the quick list or checks that a quick item was in fact quick.
 - Batch triage sends one request per item and stops at the first failure.
 - Reading the settings file and each team costs one extra GitHub query per

@@ -42,6 +42,20 @@ type DemoStore struct {
 	order    []int
 	Comments []string
 	lead     *Lead
+	schedule string
+}
+
+func (s *DemoStore) TriageSchedule(context.Context) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.schedule, nil
+}
+
+func (s *DemoStore) SetTriageSchedule(_ context.Context, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.schedule = text
+	return nil
 }
 
 func (s *DemoStore) TriageLead(context.Context) (*Lead, error) {

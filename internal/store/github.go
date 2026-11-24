@@ -36,6 +36,7 @@ type GitHub struct {
 	priorities string
 	lead       *Lead
 	leadIssue  string // node ID of the triage issue
+	schedule   string // its body, which holds the triage schedule
 	fetched    time.Time
 }
 
@@ -246,31 +247,40 @@ func (g *GitHub) load(ctx context.Context) error {
 		}
 	}
 	var lead *Lead
-	leadIssue := ""
+	leadIssue, schedule := "", ""
 	if g.cfg.TriageIssue > 0 {
 		var out struct {
 			Repository struct {
 				Issue *struct {
-					ID        string
-					UpdatedAt time.Time
-					Assignees struct{ Nodes []struct{ Login string } }
+					ID            string
+					Body          string
+					UpdatedAt     time.Time
+					Assignees     struct{ Nodes []struct{ Login string } }
+					TimelineItems struct {
+						Nodes []struct{ CreatedAt *time.Time }
+					}
 				}
 			}
 		}
 		vars := map[string]any{"o": g.cfg.Owner, "r": g.cfg.Repo, "n": g.cfg.TriageIssue}
-		if err := g.GraphQL(ctx, `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){id updatedAt assignees(first:1){nodes{login}}}}}`, vars, &out); err != nil {
+		if err := g.GraphQL(ctx, `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){
+		  id body updatedAt assignees(first:1){nodes{login}}
+		  timelineItems(last:1,itemTypes:[ASSIGNED_EVENT]){nodes{... on AssignedEvent{createdAt}}}}}}`, vars, &out); err != nil {
 			return err
 		}
 		if is := out.Repository.Issue; is != nil {
-			leadIssue = is.ID
+			leadIssue, schedule = is.ID, is.Body
 			if len(is.Assignees.Nodes) > 0 {
-				// The issue's last change stands in for when the role was handed over.
+				// When the role was handed over: the last time the issue was assigned.
 				lead = &Lead{Login: is.Assignees.Nodes[0].Login, Since: is.UpdatedAt}
+				if ev := is.TimelineItems.Nodes; len(ev) > 0 && ev[0].CreatedAt != nil {
+					lead.Since = *ev[0].CreatedAt
+				}
 			}
 		}
 	}
 	g.projectID, g.fields, g.refs, g.cache, g.fetched, g.priorities = id, fields, refs, items, time.Now(), priorities
-	g.lead, g.leadIssue = lead, leadIssue
+	g.lead, g.leadIssue, g.schedule = lead, leadIssue, schedule
 	return nil
 }
 
@@ -588,6 +598,32 @@ func (g *GitHub) TriageLead(ctx context.Context) (*Lead, error) {
 		return nil, err
 	}
 	return g.lead, nil
+}
+
+// TriageSchedule is the body of the triage issue, which holds the schedule.
+func (g *GitHub) TriageSchedule(ctx context.Context) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.fresh(ctx); err != nil {
+		return "", err
+	}
+	return g.schedule, nil
+}
+
+// SetTriageSchedule rewrites the body of the triage issue.
+func (g *GitHub) SetTriageSchedule(ctx context.Context, text string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.fresh(ctx); err != nil {
+		return err
+	}
+	if g.leadIssue == "" {
+		return fmt.Errorf("github: no triage issue is configured")
+	}
+	err := g.GraphQL(ctx, `mutation($i:ID!,$b:String!){updateIssue(input:{id:$i,body:$b}){clientMutationId}}`,
+		map[string]any{"i": g.leadIssue, "b": text}, nil)
+	g.cache = nil
+	return err
 }
 
 // SetTriageLead reassigns the triage issue, so the hand-over is visible in

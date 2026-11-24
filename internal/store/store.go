@@ -83,9 +83,15 @@ type Lead struct {
 }
 
 // Rota is implemented by stores that can record who the triage lead is.
+//
+// The store keeps two things: who holds the role right now and since when, and
+// the schedule as a piece of text. What the schedule means, and who therefore
+// leads this week, is worked out in package flow.
 type Rota interface {
-	TriageLead(ctx context.Context) (*Lead, error) // nil when nobody is
+	TriageLead(ctx context.Context) (*Lead, error) // who was last handed the role; nil when nobody
 	SetTriageLead(ctx context.Context, login string) error
+	TriageSchedule(ctx context.Context) (string, error)
+	SetTriageSchedule(ctx context.Context, text string) error
 }
 
 type Store interface {

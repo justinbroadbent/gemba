@@ -17,6 +17,7 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
   const [type, setType] = useState<string | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const [early, setEarly] = useState(false);
+  const [rotaOpen, setRotaOpen] = useState(false);
   if (error) return <p className="notice stop">{error}</p>;
   if (!data) return null;
 
@@ -29,6 +30,15 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
       setNotice(e instanceof ApiError ? e.message : "Could not queue the item.");
       return false;
     }
+  };
+  const saveRota = async (change: { rotation?: string[]; weeks?: Record<string, string> }) => {
+    try {
+      await post(`/api/w/${ws.slug}/triage-rota`, change);
+      setNotice(null);
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : "Could not change the rota.");
+    }
+    reload();
   };
   const handOver = async (login: string) => {
     try {
@@ -81,9 +91,10 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
             )}
           </p>
         </div>
-        <LeadPlate data={data} handOver={handOver} />
+        <LeadPlate data={data} handOver={handOver} showRota={() => setRotaOpen(!rotaOpen)} />
       </header>
       {notice && <p className="notice stop">{notice}</p>}
+      {rotaOpen && data.rota && <RotaPanel data={data} save={saveRota} />}
 
       <section className="landing" aria-label="Where work would land">
         {data.cells.map((c) => (
@@ -154,7 +165,7 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 /** Who answers for triage this week. Everyone sees it; a manager hands it over. */
-function LeadPlate({ data, handOver }: { data: Inbox; handOver: (login: string) => void }) {
+function LeadPlate({ data, handOver, showRota }: { data: Inbox; handOver: (login: string) => void; showRota: () => void }) {
   const [changing, setChanging] = useState(false);
   const lead = data.lead;
   return (
@@ -184,14 +195,126 @@ function LeadPlate({ data, handOver }: { data: Inbox; handOver: (login: string) 
         <p className={lead ? "lead-name" : "lead-name nobody"}>{lead ? lead.name : "Nobody yet"}</p>
       )}
       <p className="lead-note">
-        {lead && <span className={lead.days >= 7 ? "warn" : undefined}>{lead.days >= 7 ? `Held for ${lead.days} days` : `Since ${lead.since}`}</span>}
+        {lead && (
+          <span className={lead.source === "assigned" && lead.days >= 7 ? "warn" : undefined}>
+            {lead.source === "stand-in"
+              ? `Standing in since ${lead.since}`
+              : lead.source === "assigned" && lead.days >= 7
+                ? `Held for ${lead.days} days`
+                : lead.source === "assigned"
+                  ? `Since ${lead.since}`
+                  : "By the rota"}
+          </span>
+        )}
         {data.canAssign && !changing && (
           <button type="button" className="quiet" onClick={() => setChanging(true)}>
-            {lead ? "Hand over" : "Name someone"}
+            {lead ? "Stand-in" : "Name someone"}
+          </button>
+        )}
+        {data.rota && (
+          <button type="button" className="quiet" onClick={showRota}>
+            Rota
           </button>
         )}
       </p>
     </div>
+  );
+}
+
+/**
+ * Who leads triage in the coming weeks. Everyone can see it. A manager sets the
+ * rotation, and can give any week to a particular person.
+ */
+function RotaPanel({ data, save }: { data: Inbox; save: (change: { rotation?: string[]; weeks?: Record<string, string> }) => void }) {
+  const rota = data.rota!;
+  const edit = data.canAssign;
+  const name = (login: string) => data.people.find((p) => p.login === login)?.name ?? login;
+  const move = (i: number, by: number) => {
+    const r = [...rota.rotation];
+    [r[i], r[i + by]] = [r[i + by], r[i]];
+    save({ rotation: r });
+  };
+  const outside = data.people.filter((p) => !rota.rotation.includes(p.login));
+
+  return (
+    <section className="panel rota" aria-label="Triage rota">
+      <div>
+        <h2 className="eyebrow">Coming weeks</h2>
+        <ol className="rota-weeks">
+          {rota.weeks.map((w, n) => (
+            <li key={w.start} className={n === 0 ? "now" : undefined}>
+              <span className="rota-when">{n === 0 ? "This week" : `Week of ${w.label}`}</span>
+              {edit ? (
+                <select
+                  aria-label={`Triage lead for the week of ${w.label}`}
+                  value={w.named ? (w.login ?? "") : ""}
+                  onChange={(e) => save({ weeks: { [w.start]: e.target.value } })}
+                >
+                  <option value="">{w.named || !w.login ? "By the rotation" : `${w.name} (rotation)`}</option>
+                  {data.people.map((p) => (
+                    <option key={p.login} value={p.login}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="rota-name">{w.name ?? "Nobody yet"}</span>
+              )}
+              {n === 0 && data.lead?.source === "stand-in" && <span className="rota-sub">{data.lead.name} is standing in</span>}
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div>
+        <h2 className="eyebrow">Rotation</h2>
+        {rota.rotation.length === 0 && <p className="empty">No rotation yet. Without one, the lead is whoever was last named.</p>}
+        <ol className="rota-order">
+          {rota.rotation.map((login, i) => (
+            <li key={login}>
+              <span className="num">{i + 1}</span>
+              <span className="rota-name">{name(login)}</span>
+              {edit && (
+                <span className="rota-tools">
+                  <button type="button" className="quiet" aria-label={`Move ${name(login)} earlier`} disabled={i === 0} onClick={() => move(i, -1)}>
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="quiet"
+                    aria-label={`Move ${name(login)} later`}
+                    disabled={i === rota.rotation.length - 1}
+                    onClick={() => move(i, 1)}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="quiet"
+                    aria-label={`Take ${name(login)} out of the rotation`}
+                    onClick={() => save({ rotation: rota.rotation.filter((l) => l !== login) })}
+                  >
+                    Remove
+                  </button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+        {edit && outside.length > 0 && (
+          <select aria-label="Add someone to the rotation" value="" onChange={(e) => e.target.value && save({ rotation: [...rota.rotation, e.target.value] })}>
+            <option value="">Add someone</option>
+            {outside.map((p) => (
+              <option key={p.login} value={p.login}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <p className="fine">
+          Each person takes a week, Monday to Sunday. Give a week to someone above to cover leave; use Stand-in to swap for the rest of this week.
+        </p>
+      </div>
+    </section>
   );
 }
 

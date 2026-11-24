@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/justinbroadbent/gemba/internal/api"
 	"github.com/justinbroadbent/gemba/internal/config"
+	"github.com/justinbroadbent/gemba/internal/flow"
 	"github.com/justinbroadbent/gemba/internal/notify"
 	"github.com/justinbroadbent/gemba/internal/store"
 	"github.com/justinbroadbent/gemba/web"
@@ -54,7 +56,11 @@ func main() {
 			}
 			demo := store.NewDemo(cells, ws.Policies.ThroughputWeeks, time.Now().UTC())
 			if n := len(ws.People); n > 0 {
-				_ = demo.SeedTriageLead(ws.People[n/2].Login, time.Now().UTC().AddDate(0, 0, -2))
+				rota := flow.Schedule{Starts: flow.WeekOf(time.Now()).AddDate(0, 0, -7*(n/2)).Format("2006-01-02")}
+				for _, p := range ws.People {
+					rota.Rotation = append(rota.Rotation, p.Login)
+				}
+				_ = demo.SetTriageSchedule(context.Background(), rota.Text())
 			}
 			stores[ws.Slug] = demo
 		}

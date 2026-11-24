@@ -363,6 +363,29 @@ func TestEveryWriteReachesGitHub(t *testing.T) {
 		}
 	}
 
+	// The rota is kept in the body of the triage issue, and decides the lead.
+	if g.TriageIssue > 0 {
+		r.post("/triage-rota", fmt.Sprintf(`{"rotation":[%q]}`, person.Login))
+		var raw struct {
+			Repository struct{ Issue struct{ Body string } }
+		}
+		r.query(`query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){body}}}`,
+			map[string]any{"o": g.Owner, "r": g.Repo, "n": g.TriageIssue}, &raw)
+		if !strings.Contains(raw.Repository.Issue.Body, "rotation:") || !strings.Contains(raw.Repository.Issue.Body, person.Login) {
+			t.Errorf("the triage issue's body should hold the rotation, got %q", raw.Repository.Issue.Body)
+		}
+		var inbox struct {
+			Lead *struct{ Login, Source string }
+			Rota *struct{ Weeks []struct{ Login string } }
+		}
+		r.call("GET", "/inbox", "", &inbox)
+		if inbox.Lead == nil || !strings.EqualFold(inbox.Lead.Login, person.Login) || inbox.Rota == nil || len(inbox.Rota.Weeks) != 8 {
+			t.Errorf("the lead and the coming weeks should follow the rota: %+v %+v", inbox.Lead, inbox.Rota)
+		} else {
+			t.Logf("ok  the rota is kept in #%d and gives the lead (%s, by %s)", g.TriageIssue, inbox.Lead.Login, inbox.Lead.Source)
+		}
+	}
+
 	// Every page still loads from the changed project.
 	for _, page := range []string{"/floor", "/inbox", "/projects", "/tradeoff", "/review?days=30", "/mine?as=" + person.Login} {
 		if code := r.call("GET", page, "", nil); code != 200 {

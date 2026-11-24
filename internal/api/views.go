@@ -273,17 +273,45 @@ type triageRow struct {
 
 // leadView is the person who answers for triage this week.
 type leadView struct {
-	Login string `json:"login"`
-	Name  string `json:"name"`
-	Since string `json:"since"`
-	Days  int    `json:"days"`
+	Login  string `json:"login"`
+	Name   string `json:"name"`
+	Since  string `json:"since"`
+	Days   int    `json:"days"`
+	Source string `json:"source"` // "rotation", "named", "stand-in" or "assigned"
 }
 
-func leadOf(l *store.Lead, ws *config.Workspace, now time.Time) *leadView {
+// rotaView is the plan for who leads triage in the coming weeks.
+type rotaView struct {
+	Rotation []string   `json:"rotation"` // logins, in order
+	Weeks    []rotaWeek `json:"weeks"`
+}
+
+type rotaWeek struct {
+	Start string `json:"start"` // the Monday, as 2006-01-02
+	Label string `json:"label"` // "Nov 23"
+	Login string `json:"login,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Named bool   `json:"named"` // given to this person outright, not by the rotation
+}
+
+func rotaOf(s flow.Schedule, ws *config.Workspace, now time.Time) *rotaView {
+	out := &rotaView{Rotation: []string{}}
+	out.Rotation = append(out.Rotation, s.Rotation...)
+	for _, w := range s.Upcoming(now, 8) {
+		row := rotaWeek{Start: w.Start.Format("2006-01-02"), Label: w.Start.Format("Jan 2"), Login: w.Login, Name: w.Login, Named: w.Named}
+		if p := ws.Person(w.Login); p != nil {
+			row.Name = p.Name
+		}
+		out.Weeks = append(out.Weeks, row)
+	}
+	return out
+}
+
+func leadOf(l *flow.Lead, ws *config.Workspace, now time.Time) *leadView {
 	if l == nil {
 		return nil
 	}
-	out := &leadView{Login: l.Login, Name: l.Login, Since: l.Since.Format("Mon, Jan 2"), Days: int(now.Sub(l.Since).Hours() / 24)}
+	out := &leadView{Login: l.Login, Name: l.Login, Since: l.Since.Format("Mon, Jan 2"), Days: int(now.Sub(l.Since).Hours() / 24), Source: l.Source}
 	if p := ws.Person(l.Login); p != nil {
 		out.Name = p.Name
 	}
@@ -310,6 +338,7 @@ type inboxView struct {
 	Fresh       []triageRow   `json:"fresh"` // in the fast lane: no decision needed yet, but one can be made
 	Cells       []cellOutlook `json:"cells"`
 	Lead        *leadView     `json:"lead"`
+	Rota        *rotaView     `json:"rota"`
 	People      []personView  `json:"people"`
 	CanTriage   bool          `json:"canTriage"` // may sort items into a queue
 	CanDecide   bool          `json:"canDecide"` // may also expedite or put at the front
@@ -534,6 +563,7 @@ type mineView struct {
 	Next       []nextView   `json:"next"`
 	Quick      []card       `json:"quick"`   // the cell's quick list
 	Waiting    []card       `json:"waiting"` // parked on someone else
+	Done       []card       `json:"done"`    // finished since the last standup
 	WaitLimit  int          `json:"waitLimit"`
 	CanAct     bool         `json:"canAct"` // the viewer may park and resume this person's work
 	Cell       string       `json:"cell,omitempty"`
@@ -545,7 +575,7 @@ type mineView struct {
 
 func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, now time.Time) mineView {
 	v := newView(items, ws, now)
-	out := mineView{People: []personView{}, Doing: []card{}, Next: []nextView{}, Quick: []card{}, Waiting: []card{}, WaitLimit: ws.Policies.WaitingLimit, Priorities: lines(priorities)}
+	out := mineView{People: []personView{}, Doing: []card{}, Next: []nextView{}, Quick: []card{}, Waiting: []card{}, Done: []card{}, WaitLimit: ws.Policies.WaitingLimit, Priorities: lines(priorities)}
 	for _, p := range ws.People {
 		out.People = append(out.People, personView{Login: p.Login, Name: p.Name, Limit: p.WIPLimit})
 	}
@@ -555,6 +585,12 @@ func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, 
 	}
 	m := flow.BuildMine(items, ws, *person, now)
 	out.Waiting = v.cards(m.Waiting)
+	since := flow.LastStandup(now)
+	for _, i := range items {
+		if i.Assignee == person.Login && i.Closed != nil && !i.Closed.Before(since) {
+			out.Done = append(out.Done, v.card(i))
+		}
+	}
 	out.Person = &personView{person.Login, person.Name, len(m.Doing), person.WIPLimit}
 	described := map[int]card{}
 	if c := ws.Cell(person.Cell); c != nil {

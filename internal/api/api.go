@@ -16,6 +16,7 @@ import (
 
 	"github.com/justinbroadbent/gemba/internal/actions"
 	"github.com/justinbroadbent/gemba/internal/config"
+	"github.com/justinbroadbent/gemba/internal/flow"
 	"github.com/justinbroadbent/gemba/internal/notify"
 	"github.com/justinbroadbent/gemba/internal/store"
 )
@@ -93,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/w/{ws}/inbox", s.in(toRead, s.inbox))
 	mux.HandleFunc("POST /api/w/{ws}/inbox/{id}", s.in(toTriage, s.triage))
 	mux.HandleFunc("POST /api/w/{ws}/triage-lead", s.in(toManage, s.setLead))
+	mux.HandleFunc("POST /api/w/{ws}/triage-rota", s.in(toManage, s.setRota))
 	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(toManage, s.move))
 	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(toRead, s.projects))
 	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
@@ -246,17 +248,91 @@ func (s *Server) floor(w http.ResponseWriter, r *http.Request, q *request) {
 
 // lead is this week's triage lead, or nil. A failure to read it is logged and
 // treated as nobody, so the pages that mention it still load.
-func (s *Server) lead(r *http.Request, q *request) *store.Lead {
-	rota, ok := q.store.(store.Rota)
+func (s *Server) lead(r *http.Request, q *request) *flow.Lead {
+	schedule, held, ok := s.rota(r, q)
 	if !ok {
 		return nil
 	}
-	l, err := rota.TriageLead(r.Context())
+	return flow.LeadNow(schedule, held, q.now)
+}
+
+// rota reads the triage schedule and who was last handed the role. A schedule
+// that cannot be read is logged and treated as empty, so triage carries on.
+func (s *Server) rota(r *http.Request, q *request) (flow.Schedule, *store.Lead, bool) {
+	rota, ok := q.store.(store.Rota)
+	if !ok {
+		return flow.Schedule{}, nil, false
+	}
+	held, err := rota.TriageLead(r.Context())
 	if err != nil {
 		s.Log.Error("triage lead", "workspace", q.ws.Slug, "err", err)
-		return nil
+		return flow.Schedule{}, nil, false
 	}
-	return l
+	text, err := rota.TriageSchedule(r.Context())
+	if err != nil {
+		s.Log.Error("triage schedule", "workspace", q.ws.Slug, "err", err)
+	}
+	schedule, err := flow.ParseSchedule(text)
+	if err != nil {
+		s.Log.Error("triage schedule", "workspace", q.ws.Slug, "err", err)
+	}
+	return schedule, held, true
+}
+
+// setRota changes the triage schedule: the rotation, and who takes named weeks.
+func (s *Server) setRota(w http.ResponseWriter, r *http.Request, q *request) {
+	var in struct {
+		Rotation *[]string         `json:"rotation"` // nil leaves the rotation as it is
+		Weeks    map[string]string `json:"weeks"`    // Monday to login; an empty login gives the week back to the rotation
+	}
+	if _, ok := body(w, r, "", &in); !ok {
+		return
+	}
+	rota, ok := q.store.(store.Rota)
+	if !ok || (q.ws.Store == "github" && q.ws.GitHub.TriageIssue == 0) {
+		fail(w, 400, "This workspace has nowhere to keep a triage rota. Set triage_issue in its configuration.")
+		return
+	}
+	schedule, _, _ := s.rota(r, q)
+	if in.Rotation != nil {
+		for _, login := range *in.Rotation {
+			if q.ws.Person(login) == nil {
+				fail(w, 400, "Everyone in the rotation must be on the team")
+				return
+			}
+		}
+		schedule.Rotation = *in.Rotation
+		if schedule.Starts == "" {
+			schedule.Starts = flow.WeekOf(q.now).Format("2006-01-02")
+		}
+	}
+	for week, login := range in.Weeks {
+		day, err := time.Parse("2006-01-02", week)
+		if err != nil {
+			fail(w, 400, "Weeks are given by the date of their Monday")
+			return
+		}
+		key := flow.WeekOf(day).Format("2006-01-02")
+		switch {
+		case login == "":
+			delete(schedule.Weeks, key)
+		case q.ws.Person(login) == nil:
+			fail(w, 400, "Choose someone on the team")
+			return
+		default:
+			if schedule.Weeks == nil {
+				schedule.Weeks = map[string]string{}
+			}
+			schedule.Weeks[key] = login
+		}
+	}
+	schedule.Prune(q.now)
+	if err := rota.SetTriageSchedule(r.Context(), schedule.Text()); err != nil {
+		s.storeError(w, q, err)
+		return
+	}
+	s.audit(q, "triage-rota", "rotation", schedule.Rotation, "weeks", schedule.Weeks)
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 // decides reports whether the caller holds the authority to expedite or to put
@@ -290,7 +366,7 @@ func (s *Server) setLead(w http.ResponseWriter, r *http.Request, q *request) {
 		return
 	}
 	s.audit(q, "triage-lead", "login", in.Login)
-	s.announce(q, "Triage lead", q.ws.Person(in.Login).Name+" is the triage lead from today.")
+	s.announce(q, "Triage lead", q.ws.Person(in.Login).Name+" is standing in as triage lead for the rest of this week.")
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
@@ -302,6 +378,9 @@ func (s *Server) inbox(w http.ResponseWriter, r *http.Request, q *request) {
 	}
 	out := inboxOf(items, q.ws, q.now)
 	out.Lead = leadOf(s.lead(r, q), q.ws, q.now)
+	if schedule, _, ok := s.rota(r, q); ok {
+		out.Rota = rotaOf(schedule, q.ws, q.now)
+	}
 	out.CanTriage, out.CanDecide = q.can.team, q.can.team && s.decides(r, q)
 	_, rota := q.store.(store.Rota)
 	out.CanAssign = q.can.manage && rota && (q.ws.Store != "github" || q.ws.GitHub.TriageIssue > 0)

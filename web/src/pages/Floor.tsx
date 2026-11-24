@@ -3,6 +3,7 @@ import { type Card, type Floor, type Hand, type Lane, type Workspace, ApiError, 
 import { type Go, Link } from "../App";
 import { TimeBar, TypeMark, useDetail } from "../Detail";
 import { TypeIcon } from "../TypeIcon";
+import { Standup } from "./Standup";
 
 const ON_THE_LINE = 12; // queued items drawn on the line before the rest are summarised
 
@@ -34,6 +35,8 @@ export function FloorPage({ ws, go }: { ws: Workspace; go: Go }) {
     reload();
   };
 
+  if (new URLSearchParams(window.location.search).has("standup")) return <Standup ws={ws} go={go} floor={data} />;
+
   const alerts = allAlerts ? data.attention : data.attention.slice(0, 6);
   const types = data.lanes[0]?.mix ?? [];
   const look = { focus, pulse };
@@ -46,7 +49,12 @@ export function FloorPage({ ws, go }: { ws: Workspace; go: Go }) {
         </p>
       ))}
       <section className="attention" aria-label="Needs attention">
-        <h1>{data.attention.length === 0 ? "Nothing needs attention" : "Needs attention"}</h1>
+        <div className="attention-head">
+          <h1>{data.attention.length === 0 ? "Nothing needs attention" : "Needs attention"}</h1>
+          <Link to={`/w/${ws.slug}/floor?standup=1`} go={go} className="button">
+            Start standup
+          </Link>
+        </div>
         {data.attention.length === 0 && <p className="lede">Everything in progress is moving, and no date is at risk.</p>}
         <ol>
           {alerts.map((a, n) => (

@@ -67,7 +67,8 @@ export type Floor = {
 };
 
 export type CellOutlook = { id: string; name: string; queued: number; quick: number; free: number; back: string; front: string };
-export type Lead = { login: string; name: string; since: string; days: number };
+export type Lead = { login: string; name: string; since: string; days: number; source: string };
+export type Rota = { rotation: string[]; weeks: { start: string; label: string; login?: string; name?: string; named: boolean }[] };
 export type TriageRow = { card: Card; why: string; urgent: boolean; priority?: string; waiting: string; late: boolean };
 export type Inbox = {
   fastLane: number;
@@ -78,6 +79,7 @@ export type Inbox = {
   fresh: TriageRow[];
   cells: CellOutlook[];
   lead: Lead | null;
+  rota: Rota | null;
   people: PersonRef[];
   canTriage: boolean;
   canDecide: boolean;
@@ -143,6 +145,7 @@ export type Mine = {
   next: { card: Card; position: number; above: boolean }[];
   quick: Card[];
   waiting: Card[];
+  done: Card[];
   waitLimit: number;
   canAct: boolean;
   cell?: string;
