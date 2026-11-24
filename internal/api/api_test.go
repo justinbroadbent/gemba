@@ -169,6 +169,76 @@ func TestManagerCanTriageAndSeesConflicts(t *testing.T) {
 	}
 }
 
+// rin is on the team: she can sort work into a queue, but only the triage lead
+// or a manager can expedite it or put it at the front.
+func TestTheTeamCanTriageAndTheLeadDecides(t *testing.T) {
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := cfg.Workspace("infra")
+	ws.Managers, ws.Members = []string{"morgan@example.com"}, []string{"rin@example.com", "priya@example.com"}
+	ws.People[0].SignIn = "rin@example.com"
+	demo := store.NewDemo([]store.DemoCell{{ID: ws.Cells[0].ID}}, 4, now)
+	s := &Server{Config: cfg, Stores: map[string]store.Store{"infra": demo}, Now: func() time.Time { return now },
+		RequireAuth: true, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	h := s.Handler()
+
+	var inbox struct {
+		Rows      []struct{ Card struct{ ID int } }
+		CanTriage bool
+		CanDecide bool
+		Lead      *struct{ Login string }
+	}
+	read := func(user string) {
+		inbox.Lead = nil
+		rec := do(h, call{method: "GET", path: "/api/w/infra/inbox", user: user})
+		if err := json.Unmarshal(rec.Body.Bytes(), &inbox); err != nil || len(inbox.Rows) < 3 {
+			t.Fatalf("inbox: %v %s", err, rec.Body)
+		}
+	}
+	read("rin@example.com")
+	if !inbox.CanTriage || inbox.CanDecide || inbox.Lead != nil {
+		t.Fatalf("rin can triage but not decide, and nobody leads yet: %+v", inbox)
+	}
+	post := func(user string, n int, body string) int {
+		return do(h, call{method: "POST", path: "/api/w/infra/inbox/" + itoa(inbox.Rows[n].Card.ID), user: user, body: body}).Code
+	}
+	cell := ws.Cells[0].ID
+	if code := post("rin@example.com", 0, `{"cell":"`+cell+`","cos":"standard"}`); code != 200 {
+		t.Errorf("a team member queues at the back = %d, want 200", code)
+	}
+	if code := post("rin@example.com", 1, `{"cell":"`+cell+`","cos":"standard","top":true}`); code != 403 {
+		t.Errorf("a team member puts at the front = %d, want 403", code)
+	}
+	if code := post("rin@example.com", 1, `{"cell":"`+cell+`","cos":"expedite"}`); code != 403 {
+		t.Errorf("a team member expedites = %d, want 403", code)
+	}
+	if code := post("priya@example.com", 1, `{"cell":"`+cell+`","cos":"standard"}`); code != 403 {
+		t.Errorf("a reader who is not on the team triages = %d, want 403", code)
+	}
+
+	lead := func(user, login string) int {
+		return do(h, call{method: "POST", path: "/api/w/infra/triage-lead", user: user, body: `{"login":"` + login + `"}`}).Code
+	}
+	if code := lead("rin@example.com", ws.People[0].Login); code != 403 {
+		t.Errorf("a team member names the lead = %d, want 403", code)
+	}
+	if code := lead("morgan@example.com", "nobody"); code != 400 {
+		t.Errorf("naming someone who is not on the team = %d, want 400", code)
+	}
+	if code := lead("morgan@example.com", ws.People[0].Login); code != 200 {
+		t.Fatalf("the manager names the lead = %d, want 200", code)
+	}
+	read("priya@example.com")
+	if inbox.Lead == nil || inbox.Lead.Login != ws.People[0].Login || inbox.CanTriage {
+		t.Errorf("everyone can see who leads: %+v", inbox)
+	}
+	if code := post("rin@example.com", 1, `{"cell":"`+cell+`","cos":"expedite","top":true}`); code != 200 {
+		t.Errorf("the lead expedites = %d, want 200", code)
+	}
+}
+
 func itoa(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)

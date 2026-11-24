@@ -51,6 +51,13 @@ export function NowPage({ ws }: { ws: Workspace }) {
           {picker}
         </header>
 
+        {data.lead && (
+          <p className="callout duty">
+            You are the triage lead this week.{" "}
+            <a href={`/w/${ws.slug}/triage`}>{data.triage === 0 ? "Nothing is waiting." : `${data.triage} waiting for a decision.`}</a>
+          </p>
+        )}
+
         <section>
           <h2 className="eyebrow">
             In your hands
@@ -145,6 +152,11 @@ export function NowPage({ ws }: { ws: Workspace }) {
               <li key={n}>{line}</li>
             ))}
           </ol>
+          {data.editUrl && (
+            <a className="more" href={data.editUrl} target="_blank" rel="noreferrer">
+              Edit in GitHub
+            </a>
+          )}
         </aside>
       )}
     </div>

@@ -41,6 +41,29 @@ type DemoStore struct {
 	items    map[int]*Item
 	order    []int
 	Comments []string
+	lead     *Lead
+}
+
+func (s *DemoStore) TriageLead(context.Context) (*Lead, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lead == nil {
+		return nil, nil
+	}
+	l := *s.lead
+	return &l, nil
+}
+
+func (s *DemoStore) SetTriageLead(_ context.Context, login string) error {
+	return s.SeedTriageLead(login, time.Now().UTC())
+}
+
+// SeedTriageLead sets the lead as of a given time.
+func (s *DemoStore) SeedTriageLead(login string, since time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lead = &Lead{Login: login, Since: since}
+	return nil
 }
 
 // NewDemo seeds a floor for the given cells, with timestamps relative to now.

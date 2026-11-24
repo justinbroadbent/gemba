@@ -24,17 +24,10 @@ type Outlook struct {
 // start. Free hands take the top of the queue now; after that, each finish at
 // the cell's measured pace frees one more.
 func Outlooks(l Lane, ws *config.Workspace, norms Norms, now time.Time) []Outlook {
-	free := max(0, l.WIPLimit-len(l.Doing))
 	out := make([]Outlook, len(l.Queue))
 	for n, i := range l.Queue {
-		o := Outlook{Known: true}
-		switch {
-		case n < free:
-		case l.Throughput <= 0:
-			o.Known = false
-		default:
-			o.Wait = hours(float64(n-free+1) / l.Throughput * 7 * 24)
-		}
+		var o Outlook
+		o.Wait, o.Known = Wait(l, n)
 		if i.Due != nil {
 			_, usual, _ := norms.Aging(i, ws, now)
 			by := i.Due.Add(-usual)
@@ -44,6 +37,20 @@ func Outlooks(l Lane, ws *config.Workspace, norms Norms, now time.Time) []Outloo
 		out[n] = o
 	}
 	return out
+}
+
+// Wait is how long the item at a position in a lane's queue (0 is the front)
+// is likely to wait for a hand. It also answers "what if something were put
+// here?". Unknown when the hands are full and the cell has no measured pace.
+func Wait(l Lane, position int) (time.Duration, bool) {
+	free := max(0, l.WIPLimit-len(l.Doing))
+	switch {
+	case position < free:
+		return 0, true
+	case l.Throughput <= 0:
+		return 0, false
+	}
+	return hours(float64(position-free+1) / l.Throughput * 7 * 24), true
 }
 
 // Reason says in a few words why a queued item sits where it does. A priority

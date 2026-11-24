@@ -22,6 +22,9 @@ workspaces:
       owner: your-org            # user or organisation that owns the project
       repo: work-items           # repository holding the issues
       project: 1                 # project number, from its URL
+      # Two ordinary issues hold what the team sets by hand. Both are optional.
+      # priorities_issue: 12     # its body is the list of current priorities
+      # triage_issue: 13         # its assignee is this week's triage lead
       # Everything below is optional and shows the defaults.
       status_field: Status
       open_status: Todo

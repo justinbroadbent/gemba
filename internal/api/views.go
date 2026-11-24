@@ -126,22 +126,30 @@ func (v view) queue(l flow.Lane) []card {
 			days := o.Wait.Hours() / 24
 			c.WaitDays = &days
 		}
-		switch days := o.Wait.Hours() / 24; {
-		case !o.Known:
-		case o.Wait == 0:
-			c.Starts = "Can start now"
-		case days < 1.5:
-			c.Starts = "Likely to start in about a day"
-		case days < 10:
-			c.Starts = "Likely to start in about " + strconv.Itoa(int(days+0.5)) + " days"
-		default:
-			c.Starts = "Likely to start in about " + strconv.Itoa(int(days/7+0.5)) + " weeks"
-		}
+		c.Starts = starts(o.Wait, o.Known)
 		if o.AtRisk {
 			c.Risk = "Likely to miss " + l.Queue[n].Due.Format("Jan 2") + ": needs to start by " + o.StartBy.Format("Jan 2")
 		}
 	}
 	return cards
+}
+
+// starts says when a wait is likely to end; empty when it cannot be forecast.
+func starts(wait time.Duration, known bool) string {
+	switch days := wait.Hours() / 24; {
+	case !known:
+		return ""
+	case wait == 0:
+		return "Can start now"
+	case days < 1.5:
+		return "Likely to start in about a day"
+	case days < 10:
+		return "Likely to start in about " + strconv.Itoa(int(days+0.5)) + " days"
+	case days < 10.5:
+		return "Likely to start in about a week"
+	default:
+		return "Likely to start in about " + strconv.Itoa(int(days/7+0.5)) + " weeks"
+	}
 }
 
 type laneView struct {
@@ -188,10 +196,11 @@ func (v view) lane(l flow.Lane, items []store.Item) laneView {
 
 type floorView struct {
 	Signals struct {
-		Triage  int `json:"triage"`
-		Blocked int `json:"blocked"`
-		Aging   int `json:"aging"`
-		Over    int `json:"over"`
+		Lead    string `json:"lead,omitempty"` // this week's triage lead
+		Triage  int    `json:"triage"`
+		Blocked int    `json:"blocked"`
+		Aging   int    `json:"aging"`
+		Over    int    `json:"over"`
 	} `json:"signals"`
 	Attention []flow.Alert `json:"attention"`
 	Lanes     []laneView   `json:"lanes"`
@@ -228,18 +237,75 @@ type triageRow struct {
 	Why      string `json:"why"`
 	Urgent   bool   `json:"urgent"`
 	Priority string `json:"priority,omitempty"`
+	Waiting  string `json:"waiting"` // how long it has existed without a decision
+	Late     bool   `json:"late"`    // longer than the triage target
+}
+
+// leadView is the person who answers for triage this week.
+type leadView struct {
+	Login string `json:"login"`
+	Name  string `json:"name"`
+	Since string `json:"since"`
+	Days  int    `json:"days"`
+}
+
+func leadOf(l *store.Lead, ws *config.Workspace, now time.Time) *leadView {
+	if l == nil {
+		return nil
+	}
+	out := &leadView{Login: l.Login, Name: l.Login, Since: l.Since.Format("Mon, Jan 2"), Days: int(now.Sub(l.Since).Hours() / 24)}
+	if p := ws.Person(l.Login); p != nil {
+		out.Name = p.Name
+	}
+	return out
+}
+
+// cellOutlook says what queuing something in a cell would mean right now.
+type cellOutlook struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Queued int    `json:"queued"`
+	Free   int    `json:"free"`  // free hands
+	Back   string `json:"back"`  // when the back of the queue is likely to start
+	Front  string `json:"front"` // and the front
 }
 
 type inboxView struct {
-	FastLane int         `json:"fastLane"`
-	Rows     []triageRow `json:"rows"`
+	FastLane    int           `json:"fastLane"`
+	TargetHours float64       `json:"targetHours"`
+	Late        int           `json:"late"`
+	Rows        []triageRow   `json:"rows"`
+	Cells       []cellOutlook `json:"cells"`
+	Lead        *leadView     `json:"lead"`
+	People      []personView  `json:"people"`
+	CanTriage   bool          `json:"canTriage"` // may sort items into a queue
+	CanDecide   bool          `json:"canDecide"` // may also expedite or put at the front
+	CanAssign   bool          `json:"canAssign"` // may name the triage lead
 }
 
 func inboxOf(items []store.Item, ws *config.Workspace, now time.Time) inboxView {
 	v := newView(items, ws, now)
-	out := inboxView{FastLane: flow.FastLane(items, ws, now), Rows: []triageRow{}}
+	out := inboxView{FastLane: flow.FastLane(items, ws, now), TargetHours: ws.Policies.TriageAfterHours,
+		Rows: []triageRow{}, People: []personView{}}
 	for _, t := range flow.Inbox(items, ws, now) {
-		out.Rows = append(out.Rows, triageRow{v.card(t.Item), t.Why, t.Urgent, t.Item.ExtPriority})
+		age := now.Sub(t.Item.Created)
+		late := age.Hours() > ws.Policies.TriageAfterHours
+		if late {
+			out.Late++
+		}
+		c := v.card(t.Item)
+		c.Cell = flow.CellOf(t.Item, ws)
+		out.Rows = append(out.Rows, triageRow{c, t.Why, t.Urgent, t.Item.ExtPriority, flow.Span(age), late})
+	}
+	for _, c := range ws.Cells {
+		l := flow.BuildLane(items, ws, c, now)
+		o := cellOutlook{ID: c.ID, Name: c.Name, Queued: len(l.Queue), Free: max(0, l.WIPLimit-len(l.Doing))}
+		o.Back = starts(flow.Wait(l, len(l.Queue)))
+		o.Front = starts(flow.Wait(l, 0))
+		out.Cells = append(out.Cells, o)
+	}
+	for _, p := range ws.People {
+		out.People = append(out.People, personView{Login: p.Login, Name: p.Name})
 	}
 	return out
 }
@@ -342,6 +408,9 @@ type mineView struct {
 	Next       []nextView   `json:"next"`
 	Cell       string       `json:"cell,omitempty"`
 	Priorities []string     `json:"priorities"`
+	EditURL    string       `json:"editUrl,omitempty"` // where a manager changes the priorities
+	Lead       bool         `json:"lead"`              // this person is the triage lead this week
+	Triage     int          `json:"triage"`            // how many items are waiting for triage
 }
 
 func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, now time.Time) mineView {

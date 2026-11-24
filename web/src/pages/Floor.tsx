@@ -65,6 +65,7 @@ export function FloorPage({ ws, go }: { ws: Workspace; go: Go }) {
               {data.signals.triage} waiting for triage
             </Link>
           )}
+          {data.signals.lead && <span className="lede">Triage lead this week: {data.signals.lead}</span>}
         </p>
       </section>
 

@@ -68,6 +68,18 @@ type Prioritizer interface {
 	Priorities(ctx context.Context) (string, error)
 }
 
+// Lead is the person who answers for triage this week.
+type Lead struct {
+	Login string
+	Since time.Time
+}
+
+// Rota is implemented by stores that can record who the triage lead is.
+type Rota interface {
+	TriageLead(ctx context.Context) (*Lead, error) // nil when nobody is
+	SetTriageLead(ctx context.Context, login string) error
+}
+
 type Store interface {
 	Items(ctx context.Context) ([]Item, error)
 	Update(ctx context.Context, id int, c Change) error

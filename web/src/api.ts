@@ -56,14 +56,24 @@ export type Lane = {
 };
 
 export type Floor = {
-  signals: { triage: number; blocked: number; aging: number; over: number };
+  signals: { lead?: string; triage: number; blocked: number; aging: number; over: number };
   attention: Alert[];
   lanes: Lane[];
 };
 
+export type CellOutlook = { id: string; name: string; queued: number; free: number; back: string; front: string };
+export type Lead = { login: string; name: string; since: string; days: number };
 export type Inbox = {
   fastLane: number;
-  rows: { card: Card; why: string; urgent: boolean; priority?: string }[];
+  targetHours: number;
+  late: number;
+  rows: { card: Card; why: string; urgent: boolean; priority?: string; waiting: string; late: boolean }[];
+  cells: CellOutlook[];
+  lead: Lead | null;
+  people: PersonRef[];
+  canTriage: boolean;
+  canDecide: boolean;
+  canAssign: boolean;
 };
 
 export type Candidate = { id: number; title: string; cell?: string; stage: string };
@@ -96,12 +106,16 @@ export type Mine = {
   next: { card: Card; position: number; above: boolean }[];
   cell?: string;
   priorities: string[];
+  editUrl?: string;
+  lead: boolean;
+  triage: number;
 };
 
 export type Workspace = {
   slug: string;
   name: string;
   canWrite: boolean;
+  canTriage: boolean;
   cells: Cell[];
   kinds: Kind[];
   horizonWeeks: number;

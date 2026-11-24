@@ -34,6 +34,8 @@ type GitHub struct {
 	refs       map[int]ref
 	cache      []Item
 	priorities string
+	lead       *Lead
+	leadIssue  string // node ID of the triage issue
 	fetched    time.Time
 }
 
@@ -226,7 +228,32 @@ func (g *GitHub) load(ctx context.Context) error {
 			priorities = out.Repository.Issue.Body
 		}
 	}
+	var lead *Lead
+	leadIssue := ""
+	if g.cfg.TriageIssue > 0 {
+		var out struct {
+			Repository struct {
+				Issue *struct {
+					ID        string
+					UpdatedAt time.Time
+					Assignees struct{ Nodes []struct{ Login string } }
+				}
+			}
+		}
+		vars := map[string]any{"o": g.cfg.Owner, "r": g.cfg.Repo, "n": g.cfg.TriageIssue}
+		if err := g.GraphQL(ctx, `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){id updatedAt assignees(first:1){nodes{login}}}}}`, vars, &out); err != nil {
+			return err
+		}
+		if is := out.Repository.Issue; is != nil {
+			leadIssue = is.ID
+			if len(is.Assignees.Nodes) > 0 {
+				// The issue's last change stands in for when the role was handed over.
+				lead = &Lead{Login: is.Assignees.Nodes[0].Login, Since: is.UpdatedAt}
+			}
+		}
+	}
 	g.projectID, g.fields, g.refs, g.cache, g.fetched, g.priorities = id, fields, refs, items, time.Now(), priorities
+	g.lead, g.leadIssue = lead, leadIssue
 	return nil
 }
 
@@ -436,6 +463,40 @@ func (g *GitHub) Priorities(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return g.priorities, nil
+}
+
+// TriageLead is whoever the triage issue is assigned to.
+func (g *GitHub) TriageLead(ctx context.Context) (*Lead, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.fresh(ctx); err != nil {
+		return nil, err
+	}
+	return g.lead, nil
+}
+
+// SetTriageLead reassigns the triage issue, so the hand-over is visible in
+// GitHub and the new lead is notified there.
+func (g *GitHub) SetTriageLead(ctx context.Context, login string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.fresh(ctx); err != nil {
+		return err
+	}
+	if g.leadIssue == "" {
+		return fmt.Errorf("github: no triage issue is configured")
+	}
+	var out struct{ User *struct{ ID string } }
+	if err := g.GraphQL(ctx, `query($l:String!){user(login:$l){id}}`, map[string]any{"l": login}, &out); err != nil {
+		return err
+	}
+	if out.User == nil {
+		return fmt.Errorf("github: no user %q", login)
+	}
+	err := g.GraphQL(ctx, `mutation($i:ID!,$u:[ID!]){updateIssue(input:{id:$i,assigneeIds:$u}){clientMutationId}}`,
+		map[string]any{"i": g.leadIssue, "u": []string{out.User.ID}}, nil)
+	g.cache = nil
+	return err
 }
 
 func (g *GitHub) Comment(ctx context.Context, id int, text string) error {

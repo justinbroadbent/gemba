@@ -117,6 +117,9 @@ type GitHub struct {
 	ProjectURLField string `yaml:"project_url_field"` // text: a link to the project, such as its epic
 	// PrioritiesIssue is the number of an issue whose body states the current priorities.
 	PrioritiesIssue int `yaml:"priorities_issue"`
+	// TriageIssue is the number of an issue whose assignee is this week's triage
+	// lead. Gemba changes that assignee when a manager hands the role over.
+	TriageIssue int `yaml:"triage_issue"`
 }
 
 func (w *Workspace) Person(login string) *Person {

@@ -51,7 +51,11 @@ func main() {
 				}
 				cells = append(cells, dc)
 			}
-			stores[ws.Slug] = store.NewDemo(cells, ws.Policies.ThroughputWeeks, time.Now().UTC())
+			demo := store.NewDemo(cells, ws.Policies.ThroughputWeeks, time.Now().UTC())
+			if n := len(ws.People); n > 0 {
+				_ = demo.SeedTriageLead(ws.People[n/2].Login, time.Now().UTC().AddDate(0, 0, -2))
+			}
+			stores[ws.Slug] = demo
 		}
 		log.Info("workspace ready", "workspace", ws.Slug, "store", ws.Store)
 	}

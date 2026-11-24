@@ -52,14 +52,32 @@ func (s *Server) identify(r *http.Request) (identity, bool) {
 	return identity{Name: "local", Local: true}, true
 }
 
-// access reports what an identity may do in a workspace.
-func access(ws *config.Workspace, id identity) (read, write bool) {
+// rights are what an identity may do in a workspace. Everyone with access can
+// read. People on the team can triage. Managers can also reorder queues, record
+// trade-offs and name the triage lead.
+type rights struct {
+	read, team, manage bool
+	login              string // the person they are on this team, if recognised
+}
+
+const (
+	toRead = iota
+	toTriage
+	toManage
+)
+
+func access(ws *config.Workspace, id identity) rights {
 	if id.Local {
-		return true, true
+		return rights{read: true, team: true, manage: true}
 	}
 	name := strings.ToLower(id.Name)
-	write = slices.Contains(ws.Managers, name)
-	return write || slices.Contains(ws.Members, name), write
+	r := rights{manage: slices.Contains(ws.Managers, name)}
+	r.read = r.manage || slices.Contains(ws.Members, name)
+	if p := ws.PersonBySignIn(id.Name); p != nil && r.read {
+		r.login = p.Login
+	}
+	r.team = r.manage || r.login != ""
+	return r
 }
 
 func (s *Server) Handler() http.Handler {
@@ -67,14 +85,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
 	mux.HandleFunc("GET /api/session", s.session)
 	mux.HandleFunc("GET /api/logo", s.logo)
-	mux.HandleFunc("GET /api/w/{ws}/floor", s.in(false, s.floor))
-	mux.HandleFunc("GET /api/w/{ws}/inbox", s.in(false, s.inbox))
-	mux.HandleFunc("POST /api/w/{ws}/inbox/{id}", s.in(true, s.triage))
-	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(true, s.move))
-	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(false, s.projects))
-	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(false, s.mine))
-	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(false, s.tradeoff))
-	mux.HandleFunc("POST /api/w/{ws}/tradeoff", s.in(true, s.decide))
+	mux.HandleFunc("GET /api/w/{ws}/floor", s.in(toRead, s.floor))
+	mux.HandleFunc("GET /api/w/{ws}/inbox", s.in(toRead, s.inbox))
+	mux.HandleFunc("POST /api/w/{ws}/inbox/{id}", s.in(toTriage, s.triage))
+	mux.HandleFunc("POST /api/w/{ws}/triage-lead", s.in(toManage, s.setLead))
+	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(toManage, s.move))
+	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(toRead, s.projects))
+	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
+	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(toRead, s.tradeoff))
+	mux.HandleFunc("POST /api/w/{ws}/tradeoff", s.in(toManage, s.decide))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, 404, "Not found") })
 	mux.HandleFunc("/", s.static)
 	return mux
@@ -84,12 +103,13 @@ type request struct {
 	ws    *config.Workspace
 	store store.Store
 	who   identity
+	can   rights
 	now   time.Time
 }
 
 // in resolves the workspace and checks access before calling fn. A workspace
 // the caller cannot read is reported as missing, so its existence is not leaked.
-func (s *Server) in(write bool, fn func(http.ResponseWriter, *http.Request, *request)) http.HandlerFunc {
+func (s *Server) in(need int, fn func(http.ResponseWriter, *http.Request, *request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		who, ok := s.identify(r)
 		if !ok {
@@ -101,14 +121,14 @@ func (s *Server) in(write bool, fn func(http.ResponseWriter, *http.Request, *req
 			fail(w, 404, "No such workspace")
 			return
 		}
-		canRead, canWrite := access(ws, who)
-		if !canRead {
+		can := access(ws, who)
+		if !can.read {
 			fail(w, 404, "No such workspace")
 			return
 		}
-		if write {
-			if !canWrite {
-				fail(w, 403, "You have read-only access to this workspace")
+		if need > toRead {
+			if (need == toTriage && !can.team) || (need == toManage && !can.manage) {
+				fail(w, 403, "You do not have access to change this")
 				return
 			}
 			// A custom header cannot be sent by a cross-site form, which blocks request forgery.
@@ -117,7 +137,7 @@ func (s *Server) in(write bool, fn func(http.ResponseWriter, *http.Request, *req
 				return
 			}
 		}
-		fn(w, r, &request{ws: ws, store: s.Stores[ws.Slug], who: who, now: s.Now()})
+		fn(w, r, &request{ws: ws, store: s.Stores[ws.Slug], who: who, can: can, now: s.Now()})
 	}
 }
 
@@ -131,6 +151,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 		Slug         string        `json:"slug"`
 		Name         string        `json:"name"`
 		CanWrite     bool          `json:"canWrite"`
+		CanTriage    bool          `json:"canTriage"`
 		Cells        []config.Cell `json:"cells"`
 		Kinds        []config.Kind `json:"kinds"`
 		HorizonWeeks int           `json:"horizonWeeks"`
@@ -151,12 +172,8 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 		out.Brand.Logo = "/api/logo"
 	}
 	for _, ws := range s.Config.Workspaces {
-		if canRead, canWrite := access(ws, who); canRead {
-			me := ""
-			if p := ws.PersonBySignIn(who.Name); p != nil {
-				me = p.Login
-			}
-			out.Workspaces = append(out.Workspaces, workspace{ws.Slug, ws.Name, canWrite, ws.Cells, ws.Kinds, ws.Policies.HorizonWeeks, me})
+		if can := access(ws, who); can.read {
+			out.Workspaces = append(out.Workspaces, workspace{ws.Slug, ws.Name, can.manage, can.team, ws.Cells, ws.Kinds, ws.Policies.HorizonWeeks, can.login})
 		}
 	}
 	writeJSON(w, 200, out)
@@ -184,7 +201,60 @@ func (s *Server) floor(w http.ResponseWriter, r *http.Request, q *request) {
 		s.storeError(w, q, err)
 		return
 	}
-	writeJSON(w, 200, floorOf(items, q.ws, q.now))
+	out := floorOf(items, q.ws, q.now)
+	if l := leadOf(s.lead(r, q), q.ws, q.now); l != nil {
+		out.Signals.Lead = l.Name
+	}
+	writeJSON(w, 200, out)
+}
+
+// lead is this week's triage lead, or nil. A failure to read it is logged and
+// treated as nobody, so the pages that mention it still load.
+func (s *Server) lead(r *http.Request, q *request) *store.Lead {
+	rota, ok := q.store.(store.Rota)
+	if !ok {
+		return nil
+	}
+	l, err := rota.TriageLead(r.Context())
+	if err != nil {
+		s.Log.Error("triage lead", "workspace", q.ws.Slug, "err", err)
+		return nil
+	}
+	return l
+}
+
+// decides reports whether the caller holds the authority to expedite or to put
+// work at the front: a manager, or the triage lead acting for them this week.
+func (s *Server) decides(r *http.Request, q *request) bool {
+	if q.can.manage {
+		return true
+	}
+	l := s.lead(r, q)
+	return l != nil && q.can.login != "" && l.Login == q.can.login
+}
+
+func (s *Server) setLead(w http.ResponseWriter, r *http.Request, q *request) {
+	var in struct {
+		Login string `json:"login"`
+	}
+	if _, ok := body(w, r, "", &in); !ok {
+		return
+	}
+	rota, ok := q.store.(store.Rota)
+	if !ok || (q.ws.Store == "github" && q.ws.GitHub.TriageIssue == 0) {
+		fail(w, 400, "This workspace has nowhere to record the triage lead. Set triage_issue in its configuration.")
+		return
+	}
+	if q.ws.Person(in.Login) == nil {
+		fail(w, 400, "Choose someone on the team")
+		return
+	}
+	if err := rota.SetTriageLead(r.Context(), in.Login); err != nil {
+		s.storeError(w, q, err)
+		return
+	}
+	s.audit(q, "triage-lead", "login", in.Login)
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 func (s *Server) inbox(w http.ResponseWriter, r *http.Request, q *request) {
@@ -193,7 +263,12 @@ func (s *Server) inbox(w http.ResponseWriter, r *http.Request, q *request) {
 		s.storeError(w, q, err)
 		return
 	}
-	writeJSON(w, 200, inboxOf(items, q.ws, q.now))
+	out := inboxOf(items, q.ws, q.now)
+	out.Lead = leadOf(s.lead(r, q), q.ws, q.now)
+	out.CanTriage, out.CanDecide = q.can.team, q.can.team && s.decides(r, q)
+	_, rota := q.store.(store.Rota)
+	out.CanAssign = q.can.manage && rota && (q.ws.Store != "github" || q.ws.GitHub.TriageIssue > 0)
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) projects(w http.ResponseWriter, r *http.Request, q *request) {
@@ -227,7 +302,14 @@ func (s *Server) mine(w http.ResponseWriter, r *http.Request, q *request) {
 			priorities = text
 		}
 	}
-	writeJSON(w, 200, mineOf(items, q.ws, login, priorities, q.now))
+	out := mineOf(items, q.ws, login, priorities, q.now)
+	if g := q.ws.GitHub; q.can.manage && q.ws.Store == "github" && g.PrioritiesIssue > 0 {
+		out.EditURL = "https://github.com/" + g.Owner + "/" + g.Repo + "/issues/" + strconv.Itoa(g.PrioritiesIssue)
+	}
+	if l := s.lead(r, q); l != nil && out.Person != nil && l.Login == out.Person.Login {
+		out.Lead, out.Triage = true, len(inboxOf(items, q.ws, q.now).Rows)
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
@@ -239,6 +321,10 @@ func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 	}
 	id, ok := body(w, r, "id", &in)
 	if !ok {
+		return
+	}
+	if (in.Top || in.COS == "expedite") && !s.decides(r, q) {
+		fail(w, 403, "Only the triage lead or a manager can expedite work or put it at the front. Queue it at the back and tell them.")
 		return
 	}
 	if err := actions.Triage(r.Context(), q.store, q.ws, id, in.Cell, in.COS, in.Kind, in.Top); err != nil {
