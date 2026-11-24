@@ -2260,3 +2260,139 @@ a.quiet-button:hover {
 .quick-work .after li:last-child {
   border-bottom: 0;
 }
+
+/* ---- floor layout, second pass ----
+   Each room is the work on the left and the cell's numbers on the right. Mats
+   share the width they are given, so a cell of one fills its room as well as a
+   cell of five. The line wraps instead of scrolling. Red is kept for trouble. */
+
+.room {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+}
+.room-main {
+  min-width: 0;
+}
+.room-head {
+  padding-bottom: 6px;
+}
+.room-head h2 {
+  font-size: 26px;
+}
+.room-side {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  padding: 20px 20px 22px;
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+}
+.room-side .gauges {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+.room-side .gauges dt {
+  margin-bottom: 1px;
+}
+.room-side .gauges dd {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 13px;
+}
+.room-side .gauges dd b {
+  font-family: var(--brush);
+  font-size: 25px;
+  line-height: 1.1;
+}
+.room-side .mix {
+  max-width: none;
+  padding: 16px 0 0;
+  gap: 9px;
+}
+.room-side .mix-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name pct" "bar bar";
+  gap: 4px 8px;
+}
+.room-side .mix-name {
+  grid-area: name;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.room-side .mix-pct {
+  grid-area: pct;
+}
+.room-side .mix-bar {
+  grid-area: bar;
+}
+.mix-bar i.unplanned {
+  background: var(--ink); /* one series, one colour */
+}
+
+.mats {
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+}
+.slots {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.slot-title {
+  font-size: 14px;
+}
+.slot-note {
+  font-size: 12.5px;
+}
+/* Over the limit is a warning, not a stop: one colour for the border and the words. */
+.slot.extra {
+  border-color: var(--warn);
+}
+
+/* The line wraps instead of scrolling. A small heading marks where each stretch of time begins. */
+.track {
+  flex-wrap: wrap;
+  overflow: visible;
+  gap: 8px;
+  padding: 10px 0 14px;
+}
+.marker {
+  flex: 0 0 62px;
+  writing-mode: horizontal-tb;
+  white-space: normal;
+  align-items: flex-start;
+  padding: 6px 0 0 8px;
+  border-left: 3px solid var(--wood);
+  line-height: 1.35;
+}
+.tile {
+  flex: 1 1 140px;
+  max-width: 200px;
+  margin-top: 0;
+}
+.tile-title {
+  font-size: 13.5px;
+}
+.more-tile {
+  flex: 0 0 96px;
+}
+
+/* The bolt marks unplanned work by its shape. Red is for what needs help. */
+.mark.bolt {
+  color: inherit;
+}
+
+@media (max-width: 1100px) {
+  .room {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .room-side {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px 40px;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+  .room-side .mix {
+    padding-top: 0;
+  }
+}

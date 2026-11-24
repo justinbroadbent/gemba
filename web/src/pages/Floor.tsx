@@ -121,44 +121,55 @@ function Room(props: {
 
   return (
     <section className="room">
-      <header className="room-head">
-        <h2>{lane.cell.name}</h2>
+      <div className="room-main">
+        <header className="room-head">
+          <h2>{lane.cell.name}</h2>
+        </header>
+
+        <div className="mats">
+          {lane.hands.map((h) => (
+            <Mat key={h.login} hand={h} look={look} />
+          ))}
+          {loose.length > 0 && (
+            <Mat hand={{ login: "", name: "Not assigned", limit: loose.length, items: loose, waiting: [], pull: null }} look={look} />
+          )}
+        </div>
+
+        {lane.quick.length > 0 && <QuickList lane={lane} look={look} />}
+        <TheLine {...props} />
+      </div>
+
+      {/* The cell's numbers sit beside the work, where they do not push it down the page. */}
+      <aside className="room-side" aria-label={`${lane.cell.name} in numbers`}>
         <dl className="gauges">
           {lane.wipLimit > 0 && (
             <div>
               <dt>Hands</dt>
-              <dd className={busy > lane.wipLimit ? "stop" : undefined}>
-                <b>{busy}</b> of {lane.wipLimit} busy{lane.freeHands > 0 && `, ${lane.freeHands} free`}
+              <dd className={busy > lane.wipLimit ? "warn" : undefined}>
+                <b>
+                  {busy} of {lane.wipLimit}
+                </b>
+                busy{lane.freeHands > 0 && `, ${lane.freeHands} free`}
               </dd>
             </div>
           )}
           <div>
             <dt>Pace</dt>
             <dd>
-              <b>{lane.measured ? lane.throughput.toFixed(1) : "–"}</b> finished a week
+              <b>{lane.measured ? lane.throughput.toFixed(1) : "–"}</b>
+              finished a week
             </dd>
           </div>
           <div>
             <dt>Unplanned this week</dt>
             <dd className={lane.arrivals >= 3 && lane.arrivals > lane.arrivalsUsual * 1.5 ? "warn" : undefined}>
-              <b>{lane.arrivals}</b> arrived, usually {Math.round(lane.arrivalsUsual)}
+              <b>{lane.arrivals}</b>
+              arrived, usually {Math.round(lane.arrivalsUsual)}
             </dd>
           </div>
         </dl>
-      </header>
-
-      <div className="mats">
-        {lane.hands.map((h) => (
-          <Mat key={h.login} hand={h} look={look} />
-        ))}
-        {loose.length > 0 && (
-          <Mat hand={{ login: "", name: "Not assigned", limit: loose.length, items: loose, waiting: [], pull: null }} look={look} />
-        )}
-      </div>
-
-      {lane.quick.length > 0 && <QuickList lane={lane} look={look} />}
-      <TheLine {...props} />
-      <Mix lane={lane} look={look} />
+        <Mix lane={lane} look={look} />
+      </aside>
     </section>
   );
 }

@@ -39,9 +39,14 @@ progress, classes of service, and showing exceptions, not inventory.
    comparisons between people. Private manager notes and ratings were
    considered and deliberately left out; do not add them without that decision
    being revisited by the people who own the tool.
-6. **Plain language in the interface.** The only Japanese is the logo. Labels
+6. **Red means trouble, and nothing else.** Blocked work, dates at risk and
+   stops use the stop colour. Unplanned work is marked by its bolt shape, in
+   the ordinary ink colour, because most work is unplanned and a floor that is
+   mostly red tells nobody where to look. Warnings (over a limit, aging, quiet)
+   use the warn colour.
+7. **Plain language in the interface.** The only Japanese is the logo. Labels
    say "Triage lead", not a borrowed term.
-7. **Generic and rebrandable.** Nothing in the repository names an employer.
+8. **Generic and rebrandable.** Nothing in the repository names an employer.
    Names, colours, cells, kinds of work and thresholds all come from config.
 
 ## 2. Vocabulary

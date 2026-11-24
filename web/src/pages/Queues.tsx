@@ -151,7 +151,8 @@ function QueueColumn(props: {
           ),
         )}
         {target === null && dragging !== null && <li className="drop-end" aria-hidden="true" />}
-        {lane.line >= q.length && !find && capacity}
+        {/* The line is also drawn when it falls exactly where the list folds. */}
+        {(lane.line >= q.length || lane.line >= foldAt) && !find && capacity}
         {q.length === 0 && <li className="empty">The queue is empty.</li>}
       </ol>
       {!find && q.length > Math.max(lane.line, 3) && (
