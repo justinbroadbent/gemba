@@ -306,6 +306,7 @@ type inboxView struct {
 	QuickDays   float64       `json:"quickDays"`
 	Late        int           `json:"late"`
 	Rows        []triageRow   `json:"rows"`
+	Fresh       []triageRow   `json:"fresh"` // in the fast lane: no decision needed yet, but one can be made
 	Cells       []cellOutlook `json:"cells"`
 	Lead        *leadView     `json:"lead"`
 	People      []personView  `json:"people"`
@@ -317,7 +318,7 @@ type inboxView struct {
 func inboxOf(items []store.Item, ws *config.Workspace, now time.Time) inboxView {
 	v := newView(items, ws, now)
 	out := inboxView{FastLane: flow.FastLane(items, ws, now), TargetHours: ws.Policies.TriageAfterHours, QuickDays: ws.Policies.QuickDays,
-		Rows: []triageRow{}, People: []personView{}}
+		Rows: []triageRow{}, Fresh: []triageRow{}, People: []personView{}}
 	for _, t := range flow.Inbox(items, ws, now) {
 		age := now.Sub(t.Item.Created)
 		late := age.Hours() > ws.Policies.TriageAfterHours
@@ -327,6 +328,17 @@ func inboxOf(items []store.Item, ws *config.Workspace, now time.Time) inboxView 
 		c := v.card(t.Item)
 		c.Cell = flow.CellOf(t.Item, ws)
 		out.Rows = append(out.Rows, triageRow{c, t.Why, t.Urgent, t.Item.ExtPriority, flow.Span(age), late})
+	}
+	listed := map[int]bool{}
+	for _, row := range out.Rows {
+		listed[row.Card.ID] = true
+	}
+	for _, i := range items {
+		if flow.Stage(i) == flow.Intake && !listed[i.ID] {
+			c := v.card(i)
+			c.Cell = flow.CellOf(i, ws)
+			out.Fresh = append(out.Fresh, triageRow{c, "Fresh ticket, still in the fast lane", false, i.ExtPriority, flow.Span(now.Sub(i.Created)), false})
+		}
 	}
 	for _, c := range ws.Cells {
 		l := flow.BuildLane(items, ws, c, now)

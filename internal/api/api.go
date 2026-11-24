@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
 	mux.HandleFunc("POST /api/w/{ws}/items/{id}/wait", s.in(toTriage, s.wait))
 	mux.HandleFunc("POST /api/w/{ws}/items/{id}/resume", s.in(toTriage, s.resume))
+	mux.HandleFunc("POST /api/w/{ws}/refresh", s.in(toTriage, s.refresh))
 	mux.HandleFunc("GET /api/w/{ws}/review", s.in(toRead, s.review))
 	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(toRead, s.tradeoff))
 	mux.HandleFunc("POST /api/w/{ws}/tradeoff", s.in(toManage, s.decide))
@@ -337,6 +338,15 @@ func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 		return
 	}
 	s.audit(q, "triage", "item", id, "cell", in.Cell, "cos", in.COS, "kind", in.Kind, "top", in.Top)
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// refresh drops what Gemba remembers of the work items, so the next read goes
+// to the source. For when someone has just created or changed something there.
+func (s *Server) refresh(w http.ResponseWriter, r *http.Request, q *request) {
+	if c, ok := q.store.(interface{ Invalidate() }); ok {
+		c.Invalidate()
+	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 

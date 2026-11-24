@@ -290,7 +290,13 @@ func (s *DemoStore) Items(context.Context) ([]Item, error) {
 	defer s.mu.Unlock()
 	out := make([]Item, 0, len(s.order))
 	for _, id := range s.order {
-		out = append(out, *s.items[id])
+		i := *s.items[id]
+		// Made-up addresses, so the demo shows where each item would open.
+		i.URL = fmt.Sprintf("https://example.com/issues/%d", i.ID)
+		if i.Mirrored {
+			i.SourceURL = fmt.Sprintf("https://example.com/tickets/%d", i.ID)
+		}
+		out = append(out, i)
 	}
 	return out, nil
 }

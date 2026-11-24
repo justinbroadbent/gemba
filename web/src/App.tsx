@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import { type Card, type Session, type Workspace, useData } from "./api";
+import { type Card, type Session, type Workspace, post, useData } from "./api";
 import { Detail, DetailContext } from "./Detail";
 import { Logo } from "./Logo";
 import { FloorPage } from "./pages/Floor";
@@ -64,6 +64,7 @@ export function App() {
   const [path, go] = usePath();
   const [detail, setDetail] = useState<Card | null>(null);
   const close = useCallback(() => setDetail(null), []);
+  const [round, setRound] = useState(0); // bumping it reloads the page in view
 
   useEffect(() => {
     if (session) document.title = session.brand.name;
@@ -111,12 +112,25 @@ export function App() {
             </Link>
           ))}
         </nav>
+        {ws.canTriage && (
+          <button
+            type="button"
+            className="check"
+            title="Read the work items again now, without waiting for the next refresh"
+            onClick={async () => {
+              await post(`/api/w/${ws.slug}/refresh`, {}).catch(() => {});
+              setRound((n) => n + 1);
+            }}
+          >
+            Check now
+          </button>
+        )}
         <span className="who">
           {session.user}
           {!ws.canWrite && " · read-only"}
         </span>
       </header>
-      <main key={ws.slug}>
+      <main key={`${ws.slug}/${round}`}>
         <Page page={page} ws={ws} session={session} go={go} />
       </main>
       {detail && <Detail card={detail} close={close} />}

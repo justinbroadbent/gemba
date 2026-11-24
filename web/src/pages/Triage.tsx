@@ -16,6 +16,7 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [type, setType] = useState<string | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
+  const [early, setEarly] = useState(false);
   if (error) return <p className="notice stop">{error}</p>;
   if (!data) return null;
 
@@ -54,7 +55,8 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
     const name = r.card.project ?? "";
     batches.set(name, [...(batches.get(name) ?? []), r]);
   }
-  const open = picked !== null && rows.some((r) => r.card.id === picked) ? picked : rows[0]?.card.id;
+  const fresh = early ? data.fresh.filter((r) => !type || r.card.type === type) : [];
+  const open = picked !== null && [...rows, ...fresh].some((r) => r.card.id === picked) ? picked : rows[0]?.card.id;
   const shared = { ws, data, cos: session.cos, queue, reload, open, setOpen: setPicked };
 
   return (
@@ -71,7 +73,12 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
               </b>
             )}
             {data.fastLane > 0 &&
-              ` ${data.fastLane} fresh ticket${data.fastLane === 1 ? " is" : "s are"} still in the fast lane and may be resolved without one.`}
+              ` ${data.fastLane} fresh ticket${data.fastLane === 1 ? " is" : "s are"} still in the fast lane and may be resolved without one.`}{" "}
+            {data.fresh.length > 0 && (
+              <button type="button" className="quiet" onClick={() => setEarly(!early)}>
+                {early ? "Hide them" : "Triage one now"}
+              </button>
+            )}
           </p>
         </div>
         <LeadPlate data={data} handOver={handOver} />
@@ -104,7 +111,18 @@ export function Triage({ ws, session }: { ws: Workspace; session: Session }) {
         </div>
       )}
 
-      {rows.length === 0 && <p className="empty big">Nothing to triage.</p>}
+      {rows.length === 0 && fresh.length === 0 && <p className="empty big">Nothing to triage.</p>}
+
+      {fresh.length > 0 && (
+        <section className="pile">
+          <h2 className="eyebrow">
+            Fresh tickets <span className="count">In the fast lane. Leave them unless you already know where one belongs</span>
+          </h2>
+          {fresh.map((r) => (
+            <TriageRow key={r.card.id} row={r} {...shared} />
+          ))}
+        </section>
+      )}
 
       {tickets.length > 0 && (
         <section className="pile">

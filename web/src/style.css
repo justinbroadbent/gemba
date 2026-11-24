@@ -1834,3 +1834,18 @@ button.rows-title:hover:not(:disabled) {
 .shelf {
   grid-template-columns: minmax(0, 1fr);
 }
+
+.top .check,
+.top .check:hover:not(:disabled) {
+  min-height: 0;
+  margin-left: 14px;
+  padding: 3px 10px;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--wood-ink) 45%, transparent);
+  color: var(--wood-ink);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+.top .check:hover:not(:disabled) {
+  border-color: var(--wood-ink);
+}

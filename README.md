@@ -119,3 +119,18 @@ web                the React app
 ## License
 
 MIT
+
+## Proving it works
+
+Three layers, each answering a different question.
+
+| Question | How | Command |
+|---|---|---|
+| Are the rules right? | Unit tests on the flow rules, the actions and the API's access control | `go test ./...` |
+| Does it really write to GitHub? | Drives every write through the API, then reads the result back from GitHub with an independent query. Creates and removes its own issues. | `GEMBA_E2E=1 GEMBA_CONFIG=/abs/path/config.yml GITHUB_TOKEN=... go test ./e2e -v` |
+| Do the pages work when a person uses them? | Clicks, drags and types through the built app in a real browser, against the demo floor | `npm --prefix web run e2e` |
+
+The GitHub test needs a project you can afford to change, with the fields in
+`examples/github.yml` plus a "Waiting" status, a "Quick" class of service and a
+triage issue. The browser test uses Edge or Chrome already on the machine
+(`BROWSER=chrome` to choose).

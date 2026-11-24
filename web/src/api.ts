@@ -67,12 +67,14 @@ export type Floor = {
 
 export type CellOutlook = { id: string; name: string; queued: number; quick: number; free: number; back: string; front: string };
 export type Lead = { login: string; name: string; since: string; days: number };
+export type TriageRow = { card: Card; why: string; urgent: boolean; priority?: string; waiting: string; late: boolean };
 export type Inbox = {
   fastLane: number;
   targetHours: number;
   quickDays: number;
   late: number;
-  rows: { card: Card; why: string; urgent: boolean; priority?: string; waiting: string; late: boolean }[];
+  rows: TriageRow[];
+  fresh: TriageRow[];
   cells: CellOutlook[];
   lead: Lead | null;
   people: PersonRef[];

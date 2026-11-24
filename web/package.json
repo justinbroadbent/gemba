@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit && vite build",
+    "e2e": "cd .. && node web/e2e/browser.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -15,6 +16,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.65.1",
     "typescript": "^5.6.3",
     "vite": "^6.0.0"
   }
