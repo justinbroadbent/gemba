@@ -92,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(toManage, s.move))
 	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(toRead, s.projects))
 	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
+	mux.HandleFunc("GET /api/w/{ws}/review", s.in(toRead, s.review))
 	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(toRead, s.tradeoff))
 	mux.HandleFunc("POST /api/w/{ws}/tradeoff", s.in(toManage, s.decide))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, 404, "Not found") })

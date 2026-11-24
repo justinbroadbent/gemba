@@ -175,6 +175,42 @@ func NewDemo(cells []DemoCell, throughputWeeks int, now time.Time) *DemoStore {
 		}
 	}
 
+	// Older history, so a look back over months has something to show. It has
+	// its own random source, which leaves the floor above unchanged.
+	old := rand.New(rand.NewSource(11))
+	for _, c := range cells {
+		h, ok := history[c.ID]
+		if !ok {
+			h = [2]int{2 * len(c.People), 3 * len(c.People)}
+		}
+		f := flavour(c.ID)
+		for week := throughputWeeks; week < 30; week++ {
+			count := h[0] + h[1] - 2 + old.Intn(5)
+			for n := 0; n < count; n++ {
+				closed := now.Add(-time.Duration((float64(week*7) + old.Float64()*6.9) * 24 * float64(time.Hour)))
+				i := &Item{
+					ID:     101 + len(s.order),
+					Title:  demoVerbs[f][old.Intn(len(demoVerbs[f]))] + " " + demoNouns[f][old.Intn(len(demoNouns[f]))],
+					Status: StatusDone, Cell: c.ID, Mirrored: true, ExtPriority: "low", Closed: at(closed),
+					Created: closed.Add(-2 * time.Hour),
+				}
+				if len(c.People) > 0 {
+					i.Assignee = c.People[old.Intn(len(c.People))]
+				}
+				if n < h[0] { // worked through a queue, not a quick ticket
+					started := closed.Add(-time.Duration((0.5 + old.Float64()*old.Float64()*14) * 24 * float64(time.Hour)))
+					i.COS, i.Mirrored, i.Started = "standard", old.Float64() < 0.5, at(started)
+					i.Created = started.Add(-72 * time.Hour)
+					if old.Intn(6) == 0 {
+						i.COS, i.Due = "fixed-date", at(closed.Add(time.Duration(old.Intn(9)-2)*24*time.Hour))
+					}
+				}
+				s.items[i.ID] = i
+				s.order = append(s.order, i.ID)
+			}
+		}
+	}
+
 	// Planned work gets a kind, and project work a project. A separate random
 	// source keeps the rest of the floor identical from run to run.
 	kinds := rand.New(rand.NewSource(3))

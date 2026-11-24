@@ -243,3 +243,46 @@ func itoa(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)
 }
+
+// The review counts what was finished in the period, for the team or one
+// person, and is open to every reader.
+func TestReviewLooksBack(t *testing.T) {
+	h := server(t, true)
+	get := func(query string) (out struct {
+		Finished int
+		Person   *struct{ Login string }
+		Mix      []struct{ Count int }
+		Weeks    []struct{ Planned, Unplanned int }
+		Cells    []struct{ Count int }
+		Items    []struct{ Closed string }
+	}) {
+		rec := do(h, call{method: "GET", path: "/api/w/infra/review" + query, user: "priya@example.com"})
+		if rec.Code != 200 {
+			t.Fatalf("review%s = %d: %s", query, rec.Code, rec.Body)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	team := get("?days=28")
+	sum := func(counts []struct{ Count int }) (n int) {
+		for _, c := range counts {
+			n += c.Count
+		}
+		return n
+	}
+	weeks := 0
+	for _, w := range team.Weeks {
+		weeks += w.Planned + w.Unplanned
+	}
+	if team.Finished == 0 || sum(team.Mix) != team.Finished || sum(team.Cells) != team.Finished || weeks != team.Finished || len(team.Weeks) != 4 {
+		t.Errorf("every finished item is counted once by type, by cell and by week: %+v", team)
+	}
+	if len(team.Items) != 0 || team.Person != nil {
+		t.Errorf("the team view lists no individual's items: %+v", team)
+	}
+	if longer := get("?days=182"); longer.Finished <= team.Finished {
+		t.Errorf("half a year holds more than four weeks: %d vs %d", longer.Finished, team.Finished)
+	}
+}

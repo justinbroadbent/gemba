@@ -97,6 +97,26 @@ export type Project = {
   forecast: string;
 };
 
+export type Finished = { card: Card; closed: string; took?: string; note?: string };
+export type Review = {
+  days: number;
+  from: string;
+  to: string;
+  person: PersonRef | null;
+  people: PersonRef[];
+  finished: number;
+  perWeek: number;
+  mix: Share[];
+  weeks: { start: string; planned: number; unplanned: number }[];
+  pace: { type: string; name: string; icon: string; count: number; typical: string; most: string }[];
+  dates: { met: number; missed: number };
+  cells: Share[];
+  projects: { name: string; url?: string; icon: string; finished: number; remaining: number; total: number }[];
+  notable: Finished[];
+  items: Finished[];
+  holding: Card[];
+};
+
 export type PersonRef = { login: string; name: string; count: number; limit: number };
 export type Mine = {
   person: PersonRef | null;

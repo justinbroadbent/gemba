@@ -5,6 +5,7 @@ import { Logo } from "./Logo";
 import { FloorPage } from "./pages/Floor";
 import { NowPage } from "./pages/Now";
 import { ProjectsPage } from "./pages/Projects";
+import { ReviewPage } from "./pages/Review";
 import { Queues } from "./pages/Queues";
 import { Triage } from "./pages/Triage";
 import { TradeoffPage } from "./pages/Tradeoff";
@@ -17,6 +18,7 @@ const PAGES = [
   { id: "projects", label: "Projects" },
   { id: "triage", label: "Triage" },
   { id: "tradeoff", label: "Trade-off" },
+  { id: "review", label: "Review" },
 ];
 
 function usePath(): [string, (to: string) => void] {
@@ -134,6 +136,8 @@ function Page(props: { page: string; ws: Workspace; session: Session; go: Go }) 
       return <ProjectsPage {...props} />;
     case "tradeoff":
       return <TradeoffPage {...props} />;
+    case "review":
+      return <ReviewPage {...props} />;
     default:
       return <FloorPage {...props} />;
   }
