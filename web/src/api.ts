@@ -148,6 +148,7 @@ export type Mine = {
   done: Card[];
   waitLimit: number;
   canAct: boolean;
+  canTake: boolean;
   cell?: string;
   priorities: string[];
   editUrl?: string;

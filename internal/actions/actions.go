@@ -129,6 +129,37 @@ func own(ctx context.Context, st store.Store, id int, login string, manage bool)
 	return item, nil
 }
 
+// Take is a person pulling a queued item into their own hands: it becomes
+// theirs and in progress. Nobody can take work for someone else; handing work
+// to a person is done, when it must be, in the system the work lives in.
+func Take(ctx context.Context, st store.Store, ws *config.Workspace, id int, login string) error {
+	person := ws.Person(login)
+	if person == nil {
+		return bad("Only someone on the team can take work")
+	}
+	items, err := st.Items(ctx)
+	if err != nil {
+		return err
+	}
+	item, err := find(items, id)
+	if err != nil {
+		return err
+	}
+	switch {
+	case item.Mirrored:
+		return bad("This is a ticket: take it in the ticketing system and it will show in your hands here")
+	case flow.Stage(item) != flow.Queued:
+		return &Error{Msg: fmt.Sprintf("#%d is no longer waiting in a queue", id), Conflict: true}
+	case item.Assignee != "" && item.Assignee != login:
+		name := item.Assignee
+		if p := ws.Person(item.Assignee); p != nil {
+			name = p.Name
+		}
+		return &Error{Msg: fmt.Sprintf("#%d already belongs to %s", id, name), Conflict: true}
+	}
+	return st.Update(ctx, id, store.Change{Assignee: &login, Status: ptr(store.StatusInProgress)})
+}
+
 // Wait parks an in-progress item until someone else does their part. It frees
 // the hand; the reason says who to chase.
 func Wait(ctx context.Context, st store.Store, id int, on, login string, manage bool) error {

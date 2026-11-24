@@ -177,6 +177,23 @@ try {
     await page.waitForFunction((n) => document.querySelectorAll(".hands button.hand").length === n, held, { timeout: 5000 });
   });
 
+  await check("now: take it puts the next item in your own hands", async () => {
+    const floor = await fetch(`${BASE}/api/w/${ws}/floor`).then((r) => r.json());
+    let who = null;
+    for (const h of floor.lanes.flatMap((l) => l.hands)) {
+      const m = await fetch(`${BASE}/api/w/${ws}/mine?as=${h.login}`).then((r) => r.json());
+      if (m.next[0] && !m.next[0].card.mirrored) who = { login: h.login, title: m.next[0].card.title };
+      if (who) break;
+    }
+    expect(who, "someone on the demo floor has planned work next");
+    await go(`${w}/now?as=${who.login}`, ".next h3");
+    const held = await page.locator(".hands button.hand").count();
+    await page.locator(".next").getByRole("button", { name: /Take it/ }).click();
+    await page.waitForFunction((n) => document.querySelectorAll(".hands button.hand").length === n + 1, held, { timeout: 5000 });
+    expect((await page.locator(".hands").innerText()).includes(who.title), "it is now in hand");
+    expect(!(await page.locator(".next h3").innerText().catch(() => "")).includes(who.title), "and something else is next");
+  });
+
   await check("now: the page says what to pull next and lists the quick ones", async () => {
     expect((await page.locator(".next h3").count()) === 1, "one thing to pull next");
     expect((await page.locator(".next-why").innerText()).trim().length > 0, "with the reason it is next");

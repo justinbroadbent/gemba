@@ -565,7 +565,8 @@ type mineView struct {
 	Waiting    []card       `json:"waiting"` // parked on someone else
 	Done       []card       `json:"done"`    // finished since the last standup
 	WaitLimit  int          `json:"waitLimit"`
-	CanAct     bool         `json:"canAct"` // the viewer may park and resume this person's work
+	CanAct     bool         `json:"canAct"`  // the viewer may park and resume this person's work
+	CanTake    bool         `json:"canTake"` // the viewer is this person, and may take work for themselves
 	Cell       string       `json:"cell,omitempty"`
 	Priorities []string     `json:"priorities"`
 	EditURL    string       `json:"editUrl,omitempty"` // where a manager changes the priorities

@@ -345,6 +345,13 @@ func (s *DemoStore) Update(_ context.Context, id int, c Change) error {
 	if c.WaitingOn != nil {
 		i.WaitingOn = *c.WaitingOn
 	}
+	if c.Assignee != nil {
+		i.Assignee = *c.Assignee
+	}
+	if c.Status != nil && *c.Status == StatusInProgress && i.Started == nil {
+		now := time.Now().UTC()
+		i.Started, i.Updated = &now, &now
+	}
 	if c.Due != nil {
 		d := *c.Due
 		i.Due = &d

@@ -156,8 +156,13 @@ export function NowPage({ ws }: { ws: Workspace }) {
                 {data.full ? "Your hands are full. Finish or hand one back before pulling this." : first.card.starts}
               </p>
               <p className="next-actions">
+                {data.canTake && !first.card.mirrored && (
+                  <button type="button" onClick={() => act(`${first.card.id}/take`, { as: data.person!.login })}>
+                    {data.full ? "Take it anyway" : "Take it"}
+                  </button>
+                )}
                 {first.card.url && (
-                  <a className="button" href={first.card.url} target="_blank" rel="noreferrer">
+                  <a className={data.canTake && !first.card.mirrored ? "more" : "button"} href={first.card.url} target="_blank" rel="noreferrer">
                     {home(first.card)}
                   </a>
                 )}
@@ -179,7 +184,7 @@ export function NowPage({ ws }: { ws: Workspace }) {
             </p>
             <ol className="after">
               {data.quick.map((card) => (
-                <li key={card.id}>
+                <li key={card.id} className="waiting-row">
                   <button type="button" onClick={() => open(card)}>
                     <span className="num" />
                     <span className="after-title">
@@ -188,6 +193,11 @@ export function NowPage({ ws }: { ws: Workspace }) {
                     </span>
                     <span className={`after-why${card.risk ? " warn" : ""}`}>{card.risk ?? card.reason}</span>
                   </button>
+                  {data.canTake && !card.mirrored && (
+                    <button type="button" className="quiet" onClick={() => act(`${card.id}/take`, { as: data.person!.login })}>
+                      Take it
+                    </button>
+                  )}
                 </li>
               ))}
             </ol>

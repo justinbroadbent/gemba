@@ -363,6 +363,14 @@ func TestEveryWriteReachesGitHub(t *testing.T) {
 		}
 	}
 
+	// Taking an item makes it yours and in progress.
+	r.post(fmt.Sprintf("/items/%d/take", c), fmt.Sprintf(`{"as":%q}`, person.Login))
+	if taken := r.want("take it sets the status", c, map[string]string{g.StatusField: g.InProgressStatus[0]}); !strings.EqualFold(taken.Assignee, person.Login) {
+		t.Errorf("#%d should be assigned to %s, got %q", c, person.Login, taken.Assignee)
+	} else {
+		t.Logf("ok  take it assigns #%d to %s", c, person.Login)
+	}
+
 	// The rota is kept in the body of the triage issue, and decides the lead.
 	if g.TriageIssue > 0 {
 		r.post("/triage-rota", fmt.Sprintf(`{"rotation":[%q]}`, person.Login))

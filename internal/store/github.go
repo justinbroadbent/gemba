@@ -561,6 +561,20 @@ func (g *GitHub) Update(ctx context.Context, id int, c Change) error {
 			cached.Started = &now
 		}
 	}
+	if c.Assignee != nil {
+		var out struct{ User *struct{ ID string } }
+		if err := g.GraphQL(ctx, `query($l:String!){user(login:$l){id}}`, map[string]any{"l": *c.Assignee}, &out); err != nil {
+			return err
+		}
+		if out.User == nil {
+			return fmt.Errorf("github: no user %q", *c.Assignee)
+		}
+		if err := g.GraphQL(ctx, `mutation($a:ID!,$u:[ID!]!){addAssigneesToAssignable(input:{assignableId:$a,assigneeIds:$u}){clientMutationId}}`,
+			map[string]any{"a": r.issue, "u": []string{out.User.ID}}, nil); err != nil {
+			return err
+		}
+		cached.Assignee = *c.Assignee
+	}
 	if c.Due != nil {
 		if err := g.set(ctx, r, g.cfg.DueField, map[string]any{"date": c.Due.Format("2006-01-02")}); err != nil {
 			return err

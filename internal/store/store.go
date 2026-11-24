@@ -6,9 +6,11 @@
 // Field ownership:
 //   - Gemba writes only Cell, Kind, COS (class of service), Rank, the due date
 //     given at triage, and comments.
-//     It changes Status in two cases, and never on a mirrored item: back to
-//     open when a trade-off decision pauses work, and between in progress and
-//     waiting when the person holding an item says so.
+//     It changes Status in three cases, and never on a mirrored item: back to
+//     open when a trade-off decision pauses work; between in progress and
+//     waiting when the person holding an item says so; and to in progress when
+//     someone takes an item, which also makes them its assignee. Gemba assigns
+//     nobody else: it never hands work to a person.
 //   - Everything else is owned by the engineers or by whatever sync mirrors
 //     tickets in from an external system. Gemba never writes it.
 package store
@@ -66,6 +68,8 @@ type Change struct {
 	Rank   *float64
 	Status *string
 	Due    *time.Time // set at triage for work with a fixed date
+	// Assignee is set only when a person takes an item for themselves.
+	Assignee *string
 	// WaitingOn goes with a change of Status to or from waiting.
 	WaitingOn *string
 }

@@ -77,7 +77,7 @@ progress, classes of service, and showing exceptions, not inventory.
 
 | Page | Route | For | What it does |
 |---|---|---|---|
-| Now | `/w/{ws}/now` | Each engineer | Hands, waiting items, the one thing to pull next with its reason, what comes after, a prominent Quick work panel for the cell, the team's priorities. Park and resume your own work here. |
+| Now | `/w/{ws}/now` | Each engineer | Hands, waiting items, the one thing to pull next with its reason, what comes after, a prominent Quick work panel for the cell, the team's priorities. Take the next item or a quick one, and park and resume your own work, here. |
 | Floor | `/w/{ws}/floor` | Standup | "Start standup" steps through the team one person at a time (`?standup=1&at=login`): in hand, in the way, finished since the last standup, waiting, next. Read-only, open to everyone. Otherwise:  Attention sentences, then a room per cell: a mat per person, the quick list, the line (drag to reorder), where finished work went. |
 | Queues | `/w/{ws}/queues` | Planning | The full ranked queues, searchable, folded past the capacity line. |
 | Projects | `/w/{ws}/projects` | Planning, reporting | Roll-up per project with progress and a pace-based forecast. |
@@ -197,7 +197,7 @@ overwriting each other.
 | Field | Owner | Gemba |
 |---|---|---|
 | Title, body, labels, open/closed | Engineers or the sync | reads |
-| Assignee | Engineers or the sync | reads |
+| Assignee | Engineers or the sync | reads; sets it only to the person who presses "Take it" |
 | Status | Engineers or the sync | reads; writes only in the cases below |
 | Blocked | Engineers | reads |
 | Source priority, Source URL | The sync | reads |
@@ -214,7 +214,16 @@ overwriting each other.
 **Status writes, never on a mirrored item:**
 - back to the open status when a trade-off pauses work in progress;
 - to the waiting status when the holder sets work aside, and back to the
-  in-progress status when they take it back.
+  in-progress status when they take it back;
+- to the in-progress status when someone takes a queued item ("Take it" on
+  the Now page), which also assigns it to them.
+
+**Gemba never hands work to a person.** "Take it" assigns only the person who
+presses it; with sign-in on, the server uses the signed-in identity and ignores
+any other name. There is deliberately no "assign to" for managers: priority is
+set by the order of the queue, and assigning someone directly is a last resort
+done in GitHub or the ticketing system. Gemba respects an assignment made
+there: a queued item with an assignee is offered only to that person.
 
 For mirrored items the same changes are made in the ticketing system and
 arrive through the sync.
@@ -486,6 +495,7 @@ All JSON. View models are shaped for the pages; see `web/src/api.ts` for types.
 | `GET /api/w/{ws}/projects` | reader | Project roll-ups |
 | `GET /api/w/{ws}/tradeoff?item=&cell=` | reader | Candidates and a preview of the cost |
 | `POST /api/w/{ws}/tradeoff` | manager | `{item, cell, pause, authorizedBy}` |
+| `POST /api/w/{ws}/items/{id}/take` | team | Takes a queued, non-mirrored item for the caller. `{as}` is honoured only in a local session with no sign-in |
 | `POST /api/w/{ws}/items/{id}/wait` | holder or manager | `{on}` |
 | `POST /api/w/{ws}/items/{id}/resume` | holder or manager | `{}` |
 | `GET /api/w/{ws}/pulse?as={login}` | reader | The little a browser needs to notice change: triage ids, and one person's hands, waiting items and next item |
@@ -527,8 +537,8 @@ the browser test for any new interaction.
 
 **Proven:** the rules (unit tests); cells and kinds read from the project's
 fields and people from the settings file, on a real project; every write reaching GitHub (triage with
-type and date, quick, reorder, waiting and resume, trade-off with pause and
-comment, triage lead); the main interactions in a browser, including dragging.
+type and date, quick, reorder, take, waiting and resume, trade-off with pause
+and comment, triage lead and rota); the main interactions in a browser, including dragging.
 
 **Not proven:**
 - People read from GitHub Teams, against a real organisation (section 8).

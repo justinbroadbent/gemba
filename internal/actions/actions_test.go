@@ -303,6 +303,40 @@ func TestWaitFreesAHandAndResumeTakesItBack(t *testing.T) {
 	}
 }
 
+func TestTakeIsOnlyForYourself(t *testing.T) {
+	st, ws := setup(t)
+	var planned, ticket store.Item
+	for _, i := range items(t, st) {
+		if flow.Stage(i) != flow.Queued || i.Assignee != "" {
+			continue
+		}
+		if i.Mirrored && ticket.ID == 0 {
+			ticket = i
+		} else if !i.Mirrored && planned.ID == 0 {
+			planned = i
+		}
+	}
+	if planned.ID == 0 || ticket.ID == 0 {
+		t.Fatal("demo data should have planned work and a ticket queued")
+	}
+	me, other := ws.People[0].Login, ws.People[1].Login
+	if err := Take(ctx, st, ws, planned.ID, "stranger"); err == nil {
+		t.Error("only someone on the team can take work")
+	}
+	if err := Take(ctx, st, ws, ticket.ID, me); err == nil || !strings.Contains(err.Error(), "ticketing system") {
+		t.Errorf("tickets are taken in the ticketing system, got %v", err)
+	}
+	if err := Take(ctx, st, ws, planned.ID, me); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, st, planned.ID); got.Assignee != me || flow.Stage(got) != flow.Doing || got.Started == nil {
+		t.Errorf("it should be mine and in progress: %+v", got)
+	}
+	if err := Take(ctx, st, ws, planned.ID, other); !isConflict(err) {
+		t.Errorf("work already in hand cannot be taken again, got %v", err)
+	}
+}
+
 func TestFixedDateNeedsADate(t *testing.T) {
 	st, ws := setup(t)
 	id := flow.Inbox(items(t, st), ws, now)[0].Item.ID

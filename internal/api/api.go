@@ -98,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(toManage, s.move))
 	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(toRead, s.projects))
 	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
+	mux.HandleFunc("POST /api/w/{ws}/items/{id}/take", s.in(toTriage, s.take))
 	mux.HandleFunc("POST /api/w/{ws}/items/{id}/wait", s.in(toTriage, s.wait))
 	mux.HandleFunc("POST /api/w/{ws}/items/{id}/resume", s.in(toTriage, s.resume))
 	mux.HandleFunc("GET /api/w/{ws}/pulse", s.in(toRead, s.pulse))
@@ -423,6 +424,7 @@ func (s *Server) mine(w http.ResponseWriter, r *http.Request, q *request) {
 		out.EditURL = "https://github.com/" + g.Owner + "/" + g.Repo + "/issues/" + strconv.Itoa(g.PrioritiesIssue)
 	}
 	out.CanAct = out.Person != nil && (q.can.manage || q.can.login == out.Person.Login)
+	out.CanTake = out.Person != nil && (q.who.Local || q.can.login == out.Person.Login)
 	if l := s.lead(r, q); l != nil && out.Person != nil && l.Login == out.Person.Login {
 		out.Lead, out.Triage = true, len(inboxOf(items, q.ws, q.now).Rows)
 	}
@@ -526,6 +528,28 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request, q *request) {
 	if c, ok := q.store.(interface{ Invalidate() }); ok {
 		c.Invalidate()
 	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// take puts an item in the caller's own hands. The person is always whoever
+// is signed in; only a local session, which has no sign-in, says who it is.
+func (s *Server) take(w http.ResponseWriter, r *http.Request, q *request) {
+	var in struct {
+		As string `json:"as"`
+	}
+	id, ok := body(w, r, "id", &in)
+	if !ok {
+		return
+	}
+	login := q.can.login
+	if q.who.Local {
+		login = in.As
+	}
+	if err := actions.Take(r.Context(), q.store, q.ws, id, login); err != nil {
+		s.actionError(w, q, err)
+		return
+	}
+	s.audit(q, "take", "item", id, "login", login)
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
