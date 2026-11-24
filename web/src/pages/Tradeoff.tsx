@@ -220,7 +220,7 @@ function Decision(props: {
           )}
           {p.atRisk.map((c) => (
             <li key={c.id} className="stop">
-              <b className="stop">{c.risk}</b>
+              This puts a date at risk:
               <CardView plain card={c} owner={false} />
             </li>
           ))}

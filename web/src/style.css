@@ -1991,7 +1991,7 @@ button.toast-text:hover:not(:disabled) {
   border: 1.5px solid var(--ink);
   font-weight: 600;
 }
-.chosen span {
+.chosen > span:not(.mark) {
   flex: 1;
   min-width: 0;
 }
