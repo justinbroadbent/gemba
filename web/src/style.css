@@ -2222,3 +2222,41 @@ a.quiet-button:hover {
     display: none;
   }
 }
+
+/* ---- quick work on a person's page ---- */
+
+.quick-work {
+  padding: 14px 18px 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+  border-left: 6px solid var(--accent);
+  border-radius: 2px;
+}
+.quick-work h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+}
+.quick-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 13px/1 system-ui, "Segoe UI", sans-serif;
+}
+.quick-lede {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.quick-work .after {
+  border-top: 1px solid var(--rule);
+}
+.quick-work .after li:last-child {
+  border-bottom: 0;
+}

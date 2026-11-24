@@ -172,7 +172,7 @@ func (v view) quick(items []store.Item) []card {
 	cards := v.cards(items)
 	for n, i := range items {
 		wait := v.now.Sub(i.Created)
-		cards[n].Reason = "Quick: for anyone with a spare half hour. Waiting " + flow.Span(wait)
+		cards[n].Reason = "Quick work. Waiting " + flow.Span(wait)
 		if wait > time.Duration(v.ws.Policies.QuickDays*24*float64(time.Hour)) {
 			cards[n].Risk = "Marked quick, but it has waited " + flow.Span(wait)
 		}

@@ -169,8 +169,8 @@ function QuickList({ lane, look }: { lane: Lane; look: Look }) {
   return (
     <div className="quick">
       <p className="line-head">
-        <b>Quick ones</b>
-        <span>{lane.quick.length} waiting. For a spare half hour, oldest first.</span>
+        <b>Quick work</b>
+        <span>{lane.quick.length} waiting. Small jobs for a free hand, oldest first.</span>
       </p>
       <ul>
         {lane.quick.map((c) => (

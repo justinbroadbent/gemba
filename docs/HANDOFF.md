@@ -72,7 +72,7 @@ progress, classes of service, and showing exceptions, not inventory.
 
 | Page | Route | For | What it does |
 |---|---|---|---|
-| Now | `/w/{ws}/now` | Each engineer | Hands, waiting items, the one thing to pull next with its reason, what comes after, the cell's quick list, the team's priorities. Park and resume your own work here. |
+| Now | `/w/{ws}/now` | Each engineer | Hands, waiting items, the one thing to pull next with its reason, what comes after, a prominent Quick work panel for the cell, the team's priorities. Park and resume your own work here. |
 | Floor | `/w/{ws}/floor` | Standup | "Start standup" steps through the team one person at a time (`?standup=1&at=login`): in hand, in the way, finished since the last standup, waiting, next. Read-only, open to everyone. Otherwise:  Attention sentences, then a room per cell: a mat per person, the quick list, the line (drag to reorder), where finished work went. |
 | Queues | `/w/{ws}/queues` | Planning | The full ranked queues, searchable, folded past the capacity line. |
 | Projects | `/w/{ws}/projects` | Planning, reporting | Roll-up per project with progress and a pace-based forecast. |

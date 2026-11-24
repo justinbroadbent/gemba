@@ -169,6 +169,31 @@ export function NowPage({ ws }: { ws: Workspace }) {
           )}
         </section>
 
+        {data.quick.length > 0 && (
+          <section className="quick-work">
+            <h2>
+              Quick work <span className="quick-count">{data.quick.length}</span>
+            </h2>
+            <p className="quick-lede">
+              Small jobs waiting in {data.cell}. Take the oldest when you have a free hand but not the time for something bigger.
+            </p>
+            <ol className="after">
+              {data.quick.map((card) => (
+                <li key={card.id}>
+                  <button type="button" onClick={() => open(card)}>
+                    <span className="num" />
+                    <span className="after-title">
+                      <TypeMark card={card} />
+                      {card.title}
+                    </span>
+                    <span className={`after-why${card.risk ? " warn" : ""}`}>{card.risk ?? card.reason}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
         {rest.length > 0 && (
           <section>
             <h2 className="eyebrow">After that</h2>
@@ -190,27 +215,6 @@ export function NowPage({ ws }: { ws: Workspace }) {
           </section>
         )}
 
-        {data.quick.length > 0 && (
-          <section>
-            <h2 className="eyebrow">
-              Got a spare half hour? <span className="count">Quick ones in {data.cell}, oldest first</span>
-            </h2>
-            <ol className="after">
-              {data.quick.map((card) => (
-                <li key={card.id}>
-                  <button type="button" onClick={() => open(card)}>
-                    <span className="num" />
-                    <span className="after-title">
-                      <TypeMark card={card} />
-                      {card.title}
-                    </span>
-                    <span className={`after-why${card.risk ? " warn" : ""}`}>{card.risk ?? card.reason}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
       </div>
 
       {data.priorities.length > 0 && (
