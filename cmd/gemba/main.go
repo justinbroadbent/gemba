@@ -18,6 +18,7 @@ import (
 
 	"github.com/justinbroadbent/gemba/internal/api"
 	"github.com/justinbroadbent/gemba/internal/config"
+	"github.com/justinbroadbent/gemba/internal/notify"
 	"github.com/justinbroadbent/gemba/internal/store"
 	"github.com/justinbroadbent/gemba/web"
 )
@@ -60,9 +61,14 @@ func main() {
 		log.Info("workspace ready", "workspace", ws.Slug, "store", ws.Store)
 	}
 
+	notifiers := map[string]notify.Notifier{}
+	for _, ws := range cfg.Workspaces {
+		notifiers[ws.Slug] = notify.For(ws.Notify.TeamsWebhook)
+	}
 	srv := &api.Server{
 		Config:      cfg,
 		Stores:      stores,
+		Notify:      notifiers,
 		Now:         func() time.Time { return time.Now().UTC() },
 		RequireAuth: os.Getenv("GEMBA_REQUIRE_AUTH") == "1",
 		Static:      web.Dist(),

@@ -54,8 +54,16 @@ type Workspace struct {
 	Priorities string   `yaml:"priorities"`
 	People     []Person `yaml:"people"`
 	Policies   Policies `yaml:"policies"`
+	Notify     Notify   `yaml:"notify"`
 	Managers   []string `yaml:"managers"`
 	Members    []string `yaml:"members"`
+}
+
+// Notify says where decisions are announced. Optional.
+type Notify struct {
+	// TeamsWebhook is a Microsoft Teams incoming webhook address, or "env:NAME"
+	// to read it from an environment variable.
+	TeamsWebhook string `yaml:"teams_webhook"`
 }
 
 type Cell struct {

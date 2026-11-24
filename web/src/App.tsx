@@ -104,7 +104,7 @@ function Shell(props: {
   setRound: (fn: (n: number) => number) => void;
 }) {
   const { session, ws, page, go, detail, setDetail, close, round, setRound } = props;
-  const watch = useWatch(ws);
+  const watch = useWatch(ws, go, session.brand.name);
   return (
     <DetailContext.Provider value={setDetail}>
       <style>{themeCss(session.theme)}</style>
@@ -143,6 +143,17 @@ function Shell(props: {
             }}
           >
             Check now
+          </button>
+        )}
+        {watch.canNotify && (
+          <button
+            type="button"
+            className="check"
+            aria-pressed={watch.notifying}
+            title="Also tell me through the operating system when I am looking elsewhere. This tab has to stay open."
+            onClick={watch.toggle}
+          >
+            {watch.notifying ? "Notifying" : "Notify me"}
           </button>
         )}
         <span className="who">

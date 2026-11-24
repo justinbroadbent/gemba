@@ -81,13 +81,36 @@ progress, classes of service, and showing exceptions, not inventory.
 
 Any item anywhere opens a side panel with a button to the ticket or issue.
 
-**Toasts.** Every 30 seconds, and on "Check now", the browser fetches a small
-pulse and compares it with the last one. New triage items, and changes to the
-viewer's own hands, waiting items or next item, are announced in a toast. A
-change made from the same browser resets the comparison silently, so nobody is
-told about what they just did. Nothing is stored on the server for this, so a
-change the viewer makes directly in GitHub is announced to them like any other,
-and nothing is announced while the app is closed (`web/src/Toasts.tsx`).
+**Toasts and notifications.** Every 30 seconds, and on "Check now", the
+browser fetches a small pulse and compares it with the last one
+(`web/src/Toasts.tsx`). It announces, in a toast:
+
+- new triage items;
+- for the viewer's own work: something new in hand, something gone, something
+  set to waiting, an item no longer blocked, a date newly at risk, a waiting
+  item due a chase, a different next item;
+- for managers: a new serious item on the Floor's attention list.
+
+Becoming blocked is not announced to the holder, who usually set it. Keep this
+list short; the bar for adding to it is "worth an interruption".
+
+A change made from the same browser resets the comparison silently, so nobody
+is told about what they just did. Nothing is stored on the server for this, so
+a change the viewer makes directly in GitHub is announced to them like any
+other.
+
+"Notify me" in the top bar also raises the same messages through the operating
+system (the browser's Notification API) while the viewer is looking elsewhere.
+The tab must stay open, and the site must be served over HTTPS (or localhost).
+Notifying people when the app is closed needs a server-side watcher and a push
+channel; that is not built.
+
+**Chat.** `internal/notify` is a stub for chat integration. With
+`notify.teams_webhook` set on a workspace (use `env:NAME` to keep the address
+out of the file), the server posts a card to a Microsoft Teams incoming webhook
+when a trade-off is recorded, when work is expedited at triage, and when the
+triage lead changes. The sender is tested against a local server only, never
+against Teams. Per-person chat messages would need the same server-side watcher.
 
 ## 4. How it is built
 
@@ -304,6 +327,7 @@ workspaces:
     people: [{ login, name, cell, wip_limit, signin }]
     managers: [sign-in names]  # may do everything
     members:  [sign-in names]  # may read; may triage if also listed in people with a signin
+    notify: { teams_webhook: "env:TEAMS_WEBHOOK" }   # optional; announces decisions to chat
     priorities: |              # used when there is no priorities_issue
       One line per priority.
     policies: { default_wip_limit, triage_after_hours, urgent_priorities,

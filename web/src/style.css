@@ -1849,6 +1849,13 @@ button.rows-title:hover:not(:disabled) {
 .top .check:hover:not(:disabled) {
   border-color: var(--wood-ink);
 }
+.top .check + .check {
+  margin-left: 6px;
+}
+.top .check[aria-pressed="true"] {
+  background: var(--wood-ink);
+  color: var(--wood);
+}
 
 /* ---- toasts ---- */
 

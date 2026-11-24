@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -15,12 +16,15 @@ import (
 
 	"github.com/justinbroadbent/gemba/internal/actions"
 	"github.com/justinbroadbent/gemba/internal/config"
+	"github.com/justinbroadbent/gemba/internal/notify"
 	"github.com/justinbroadbent/gemba/internal/store"
 )
 
 type Server struct {
 	Config *config.Config
 	Stores map[string]store.Store // by workspace slug
+	// Notify announces decisions to the team's chat, by workspace slug. Optional.
+	Notify map[string]notify.Notifier
 	Now    func() time.Time
 	// RequireAuth refuses requests that carry no signed-in identity. Turn it on
 	// in every deployed environment.
@@ -259,6 +263,7 @@ func (s *Server) setLead(w http.ResponseWriter, r *http.Request, q *request) {
 		return
 	}
 	s.audit(q, "triage-lead", "login", in.Login)
+	s.announce(q, "Triage lead", q.ws.Person(in.Login).Name+" is the triage lead from today.")
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
@@ -339,6 +344,9 @@ func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 		return
 	}
 	s.audit(q, "triage", "item", id, "cell", in.Cell, "cos", in.COS, "kind", in.Kind, "top", in.Top)
+	if in.COS == "expedite" {
+		s.announce(q, "Expedited", "#"+strconv.Itoa(id)+" was expedited in "+q.ws.Cell(in.Cell).Name+". It goes ahead of everything else there.")
+	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
@@ -361,7 +369,11 @@ func (s *Server) pulse(w http.ResponseWriter, r *http.Request, q *request) {
 		Doing   []ref  `json:"doing"`
 		Waiting []ref  `json:"waiting"`
 		Next    *ref   `json:"next"`
-	}{Triage: []ref{}, Doing: []ref{}, Waiting: []ref{}}
+		Blocked []ref  `json:"blocked"` // in this person's hands and blocked
+		Risk    []ref  `json:"risk"`    // coming to this person and likely to miss a date
+		Chase   []ref  `json:"chase"`   // this person's waiting items that are due a chase
+		Alerts  []ref  `json:"alerts"`  // for managers: what on the floor needs someone to step in
+	}{Triage: []ref{}, Doing: []ref{}, Waiting: []ref{}, Blocked: []ref{}, Risk: []ref{}, Chase: []ref{}, Alerts: []ref{}}
 	for _, row := range inboxOf(items, q.ws, q.now).Rows {
 		out.Triage = append(out.Triage, ref{row.Card.ID, row.Card.Title})
 	}
@@ -373,12 +385,30 @@ func (s *Server) pulse(w http.ResponseWriter, r *http.Request, q *request) {
 		out.As = mine.Person.Login
 		for _, c := range mine.Doing {
 			out.Doing = append(out.Doing, ref{c.ID, c.Title})
+			if c.Blocked != "" {
+				out.Blocked = append(out.Blocked, ref{c.ID, c.Title})
+			}
 		}
 		for _, c := range mine.Waiting {
 			out.Waiting = append(out.Waiting, ref{c.ID, c.Title})
+			if c.Chase {
+				out.Chase = append(out.Chase, ref{c.ID, c.Title})
+			}
+		}
+		for _, n := range mine.Next {
+			if n.Card.Risk != "" {
+				out.Risk = append(out.Risk, ref{n.Card.ID, n.Card.Risk + ": " + n.Card.Title})
+			}
 		}
 		if len(mine.Next) > 0 {
 			out.Next = &ref{mine.Next[0].Card.ID, mine.Next[0].Card.Title}
+		}
+	}
+	if q.can.manage { // only the serious ones, and only for someone who can act on them
+		for _, a := range floorOf(items, q.ws, q.now).Attention {
+			if a.Level == "stop" && a.ID != 0 {
+				out.Alerts = append(out.Alerts, ref{a.ID, a.Text})
+			}
 		}
 	}
 	writeJSON(w, 200, out)
@@ -475,6 +505,11 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request, q *request) {
 		return
 	}
 	s.audit(q, "tradeoff", "item", in.Item, "cell", in.Cell, "pause", in.Pause, "authorized_by", in.AuthorizedBy)
+	var said []string
+	for _, n := range notes {
+		said = append(said, "#"+strconv.Itoa(n.ID)+" "+n.Title+": "+n.Text)
+	}
+	s.announce(q, "Trade-off recorded", strings.Join(said, "\n\n"))
 	writeJSON(w, 200, map[string]any{"written": notes})
 }
 
@@ -500,6 +535,22 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
 	http.ServeContent(w, r, name, time.Time{}, strings.NewReader(string(b)))
+}
+
+// announce tells the team's chat about a decision. It never holds up or fails
+// the request: the decision is already recorded where it matters.
+func (s *Server) announce(q *request, title, text string) {
+	n, ok := s.Notify[q.ws.Slug]
+	if !ok {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := n.Notify(ctx, notify.Event{Workspace: q.ws.Name, Title: title, Text: text}); err != nil {
+			s.Log.Error("notify", "workspace", q.ws.Slug, "err", err)
+		}
+	}()
 }
 
 func (s *Server) audit(q *request, action string, attrs ...any) {
