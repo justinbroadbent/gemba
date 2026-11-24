@@ -139,7 +139,7 @@ function Room(props: {
           <Mat key={h.login} hand={h} look={look} />
         ))}
         {loose.length > 0 && (
-          <Mat hand={{ login: "", name: "Not assigned", limit: loose.length, items: loose, pull: null }} look={look} />
+          <Mat hand={{ login: "", name: "Not assigned", limit: loose.length, items: loose, waiting: [], pull: null }} look={look} />
         )}
       </div>
 
@@ -223,6 +223,20 @@ function Mat({ hand, look }: { hand: Hand; look: Look }) {
           ),
         )}
       </div>
+      {hand.waiting.length > 0 && (
+        <ul className="shelf" aria-label="Waiting on others">
+          {hand.waiting.map((c) => (
+            <li key={c.id}>
+              <button type="button" data-item={c.id} className={`shelved ${c.chase ? "chase" : ""} ${state(c, look)}`} onClick={() => open(c)}>
+                <span className="shelved-title">{c.title}</span>
+                <span className="shelved-note">
+                  Waiting {c.waitingFor} on {c.waitingOn}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

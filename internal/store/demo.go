@@ -263,6 +263,19 @@ func NewDemo(cells []DemoCell, throughputWeeks int, now time.Time) *DemoStore {
 	for n := 0; n < 2; n++ { // planned work nobody has queued yet
 		add("", any(), now.Add(-48*time.Hour), nil)
 	}
+	waits := []string{"the requester to confirm a time", "the vendor's support desk", "the security team's review", "the change window on Thursday"}
+	for n, c := range cells { // started, then parked until someone else does their part
+		for k, login := range c.People {
+			if (n+k)%2 == 1 {
+				continue
+			}
+			since := now.Add(-time.Duration(8+((n+k)%4)*40) * time.Hour)
+			add(c.ID, c.ID, since.Add(-96*time.Hour), func(i *Item) {
+				i.Status, i.COS, i.Assignee, i.Mirrored = StatusWaiting, "standard", login, k%3 == 0
+				i.Started, i.WaitingSince, i.WaitingOn = at(since.Add(-30*time.Hour)), at(since), waits[(n+k)%len(waits)]
+			})
+		}
+	}
 	for n, c := range cells { // small jobs on each cell's quick list
 		for k := 0; k <= n%2+1; k++ {
 			age := time.Duration(5+k*30+n*7) * time.Hour
@@ -303,7 +316,18 @@ func (s *DemoStore) Update(_ context.Context, id int, c Change) error {
 		i.Rank = &r
 	}
 	if c.Status != nil {
-		i.Status = *c.Status
+		i.Status, i.WaitingSince = *c.Status, nil
+		if i.Status == StatusWaiting {
+			now := time.Now().UTC()
+			i.WaitingSince = &now
+		}
+	}
+	if c.WaitingOn != nil {
+		i.WaitingOn = *c.WaitingOn
+	}
+	if c.Due != nil {
+		d := *c.Due
+		i.Due = &d
 	}
 	return nil
 }

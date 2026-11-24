@@ -59,6 +59,11 @@ export function Detail({ card, close }: { card: Card; close: () => void }) {
             Blocked{card.blockedFor && ` for ${card.blockedFor}`}: {card.blocked}
           </p>
         )}
+        {card.waitingOn && (
+          <p className={`callout ${card.chase ? "warn" : ""}`}>
+            Waiting{card.waitingFor && ` ${card.waitingFor}`} on {card.waitingOn}
+          </p>
+        )}
         {card.risk && <p className="callout stop">{card.risk}</p>}
         {card.agingFor && (
           <p className="callout warn">

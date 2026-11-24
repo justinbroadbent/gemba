@@ -87,7 +87,9 @@ type Policies struct {
 	UrgentPriorities []string `yaml:"urgent_priorities"`
 	AgingDays        float64  `yaml:"aging_days"`
 	QuietDays        float64  `yaml:"quiet_days"`
-	QuickDays        float64  `yaml:"quick_days"` // a quick item waiting longer than this needs attention
+	QuickDays        float64  `yaml:"quick_days"`
+	WaitingDays      float64  `yaml:"waiting_days"`  // waiting longer than this: time to chase
+	WaitingLimit     int      `yaml:"waiting_limit"` // how many items one person may have waiting // a quick item waiting longer than this needs attention
 	ThroughputWeeks  int      `yaml:"throughput_weeks"`
 	HorizonWeeks     int      `yaml:"horizon_weeks"`
 }
@@ -102,7 +104,11 @@ type GitHub struct {
 	StatusField      string   `yaml:"status_field"`
 	OpenStatus       string   `yaml:"open_status"` // option set when Gemba pauses an item
 	InProgressStatus []string `yaml:"in_progress_statuses"`
-	DoneStatus       []string `yaml:"done_statuses"`
+	// WaitingStatus are the statuses that mean started but parked on someone
+	// else. WaitingField is a text field saying who or what.
+	WaitingStatus []string `yaml:"waiting_statuses"`
+	WaitingField  string   `yaml:"waiting_field"`
+	DoneStatus    []string `yaml:"done_statuses"`
 
 	CellField     string `yaml:"cell_field"` // single select; option names match cell names
 	COSField      string `yaml:"cos_field"`  // single select; options match the classes of service
@@ -254,6 +260,12 @@ func (w *Workspace) normalise(d Policies) error {
 	if p.AgingDays <= 0 {
 		p.AgingDays = d.AgingDays
 	}
+	if p.WaitingDays <= 0 {
+		p.WaitingDays = 3
+	}
+	if p.WaitingLimit <= 0 {
+		p.WaitingLimit = 2
+	}
 	if p.QuickDays <= 0 {
 		p.QuickDays = 2
 	}
@@ -326,6 +338,10 @@ func (w *Workspace) normalise(d Policies) error {
 		def(&g.COSField, "Class of service")
 		def(&g.RankField, "Rank")
 		def(&g.BlockedField, "Blocked")
+		def(&g.WaitingField, "Waiting on")
+		if g.WaitingStatus == nil {
+			g.WaitingStatus = []string{"Waiting"}
+		}
 		def(&g.PriorityField, "Source priority")
 		def(&g.DueField, "Due")
 		def(&g.MirroredLabel, "mirrored")

@@ -1740,3 +1740,97 @@ button.rows-title:hover:not(:disabled) {
   color: var(--warn);
   font-weight: 600;
 }
+
+/* ---- waiting on others ---- */
+
+.shelf {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px dashed var(--muted);
+  list-style: none;
+}
+.shelf::before {
+  content: "Waiting on others";
+  font: 700 10px/1.5 system-ui, "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.shelved,
+.shelved:hover:not(:disabled) {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 5px 8px;
+  background: none;
+  border: 0;
+  border-left: 2px solid var(--muted);
+  border-radius: 0;
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+}
+.shelved:hover:not(:disabled) {
+  background: var(--surface);
+}
+.shelved.chase {
+  border-left-color: var(--warn);
+}
+.shelved.dim {
+  opacity: 0.3;
+}
+.shelved-title {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.shelved-note {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.shelved.chase .shelved-note {
+  color: var(--warn);
+  font-weight: 600;
+}
+.hand-cell {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+.park {
+  justify-self: start;
+  font-size: 12.5px;
+}
+.park-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.park-form input {
+  flex: 1 1 100%;
+}
+.waiting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.waiting-row > button:first-child {
+  flex: 1;
+}
+.count.warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+.mat,
+.shelf li {
+  min-width: 0;
+}
+.shelf {
+  grid-template-columns: minmax(0, 1fr);
+}

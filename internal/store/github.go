@@ -278,6 +278,8 @@ func (g *GitHub) item(n ghNode) Item {
 		case is(v, g.cfg.StatusField):
 			if oneOf(v.Name, g.cfg.InProgressStatus) {
 				i.Status, i.Started = StatusInProgress, v.UpdatedAt
+			} else if oneOf(v.Name, g.cfg.WaitingStatus) {
+				i.Status, i.WaitingSince = StatusWaiting, v.UpdatedAt
 			} else if oneOf(v.Name, g.cfg.DoneStatus) {
 				i.Status, i.Closed = StatusDone, v.UpdatedAt
 			}
@@ -298,6 +300,8 @@ func (g *GitHub) item(n ghNode) Item {
 			if reason := strings.TrimSpace(v.Text + v.Name); reason != "" {
 				i.BlockedReason, i.BlockedSince = reason, v.UpdatedAt
 			}
+		case is(v, g.cfg.WaitingField):
+			i.WaitingOn = strings.TrimSpace(v.Text + v.Name)
 		case is(v, g.cfg.PriorityField):
 			i.ExtPriority = strings.ToLower(v.Text + v.Name)
 		case is(v, g.cfg.SourceURLField):
@@ -444,13 +448,42 @@ func (g *GitHub) Update(ctx context.Context, id int, c Change) error {
 		cached.Rank = &rank
 	}
 	if c.Status != nil {
-		if *c.Status != StatusOpen {
-			return fmt.Errorf("github: Gemba only ever sets status back to open, not %q", *c.Status)
+		option := g.cfg.OpenStatus
+		switch {
+		case *c.Status == StatusWaiting && len(g.cfg.WaitingStatus) > 0:
+			option = g.cfg.WaitingStatus[0]
+		case *c.Status == StatusInProgress && len(g.cfg.InProgressStatus) > 0:
+			option = g.cfg.InProgressStatus[0]
+		case *c.Status != StatusOpen:
+			return fmt.Errorf("github: Gemba does not set status to %q", *c.Status)
 		}
-		if err := g.set(ctx, r, g.cfg.StatusField, map[string]any{"option": g.cfg.OpenStatus}); err != nil {
+		if err := g.set(ctx, r, g.cfg.StatusField, map[string]any{"option": option}); err != nil {
 			return err
 		}
-		cached.Status, cached.Started = StatusOpen, nil
+		now := time.Now()
+		cached.Status, cached.Started, cached.WaitingSince = *c.Status, nil, nil
+		switch *c.Status {
+		case StatusWaiting:
+			cached.WaitingSince = &now
+		case StatusInProgress:
+			cached.Started = &now
+		}
+	}
+	if c.Due != nil {
+		if err := g.set(ctx, r, g.cfg.DueField, map[string]any{"date": c.Due.Format("2006-01-02")}); err != nil {
+			return err
+		}
+		d := *c.Due
+		cached.Due = &d
+	}
+	if c.WaitingOn != nil {
+		// The reason is a convenience: a project without the field still gets the status.
+		if _, ok := g.fields[strings.ToLower(g.cfg.WaitingField)]; ok {
+			if err := g.set(ctx, r, g.cfg.WaitingField, map[string]any{"text": *c.WaitingOn}); err != nil {
+				return err
+			}
+		}
+		cached.WaitingOn = *c.WaitingOn
 	}
 	return nil
 }

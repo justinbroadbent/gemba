@@ -3,7 +3,7 @@ import { TypeIcon } from "../TypeIcon";
 import { type CellOutlook, type Inbox, type Session, type Workspace, ApiError, label, post, useData } from "../api";
 
 type Row = Inbox["rows"][number];
-type Choice = { cell: string; cos: string; kind: string; top: boolean };
+type Choice = { cell: string; cos: string; kind: string; top: boolean; due: string };
 type Queue = (id: number, c: Choice) => Promise<boolean>;
 
 /**
@@ -188,7 +188,7 @@ type Shared = {
 };
 
 /** The choices that queue an item, as buttons, with what each one would mean. */
-function Choices(props: { value: Choice; set: (c: Choice) => void; data: Inbox; ws: Workspace; cos: string[]; ticket: boolean }) {
+function Choices(props: { value: Choice; set: (c: Choice) => void; data: Inbox; ws: Workspace; cos: string[]; ticket: boolean; dated?: string }) {
   const { value: v, set, data, ws } = props;
   const cell: CellOutlook | undefined = data.cells.find((c) => c.id === v.cell);
   const decide = data.canDecide;
@@ -200,6 +200,7 @@ function Choices(props: { value: Choice; set: (c: Choice) => void; data: Inbox; 
     else if (v.cos === "expedite") outcome = `Goes ahead of everything in ${cell.name}. Someone should pick it up now.`;
     else if (v.top) outcome = `Front of the ${cell.name} queue. ${cell.front || "No pace measured yet"}.`;
     else outcome = `Number ${cell.queued + 1} in the ${cell.name} queue. ${cell.back || "No pace measured yet"}.`;
+    if (v.cos === "fixed-date") outcome += " The Floor will warn if that place would miss the date.";
   }
 
   return (
@@ -233,6 +234,15 @@ function Choices(props: { value: Choice; set: (c: Choice) => void; data: Inbox; 
           </Pick>
         ))}
       </Group>
+      {v.cos === "fixed-date" && (
+        <Group name="Due">
+          {props.dated ? (
+            <span className="fixed">{props.dated}, from the item</span>
+          ) : (
+            <input type="date" aria-label="Due date" value={v.due} onChange={(e) => set({ ...v, due: e.target.value })} />
+          )}
+        </Group>
+      )}
       {v.cos !== "quick" && v.cos !== "expedite" && (
         <Group name="Place">
           <Pick on={!v.top} onClick={() => set({ ...v, top: false })}>
@@ -281,6 +291,7 @@ function TriageRow({ row, ws, data, cos, queue, reload, open, setOpen }: Shared 
     cos: row.urgent && decide ? "expedite" : "standard",
     kind: c.kind ?? "",
     top: row.urgent && decide,
+    due: "",
   });
   const [busy, setBusy] = useState(false);
   const isOpen = open === c.id;
@@ -297,11 +308,11 @@ function TriageRow({ row, ws, data, cos, queue, reload, open, setOpen }: Shared 
         <div className="sort-body">
           {data.canTriage ? (
             <>
-              <Choices value={choice} set={setChoice} data={data} ws={ws} cos={cos} ticket={c.mirrored} />
+              <Choices value={choice} set={setChoice} data={data} ws={ws} cos={cos} ticket={c.mirrored} dated={c.due} />
               <p className="sort-actions">
                 <button
                   type="button"
-                  disabled={busy || !choice.cell}
+                  disabled={busy || !choice.cell || (choice.cos === "fixed-date" && !c.due && !choice.due)}
                   onClick={async () => {
                     setBusy(true);
                     await queue(c.id, choice);
@@ -331,7 +342,7 @@ function TriageRow({ row, ws, data, cos, queue, reload, open, setOpen }: Shared 
 /** Stack a whole batch of planned work in one go, keeping its order. */
 function Batch({ batch, ws, data, cos, queue, reload }: Shared & { batch: Row[] }) {
   const first = batch[0].card;
-  const [choice, setChoice] = useState<Choice>({ cell: first.cell ?? "", cos: "standard", kind: first.kind ?? "", top: false });
+  const [choice, setChoice] = useState<Choice>({ cell: first.cell ?? "", cos: "standard", kind: first.kind ?? "", top: false, due: "" });
   const [show, setShow] = useState(false);
   const [done, setDone] = useState<number | null>(null);
 
@@ -361,7 +372,7 @@ function Batch({ batch, ws, data, cos, queue, reload }: Shared & { batch: Row[] 
       <div className="sort-body">
         <Choices value={choice} set={setChoice} data={data} ws={ws} cos={cos.filter((c) => c !== "expedite")} ticket={false} />
         <p className="sort-actions">
-          <button type="button" disabled={done !== null || !choice.cell} onClick={run}>
+          <button type="button" disabled={done !== null || !choice.cell || (choice.cos === "fixed-date" && !choice.due)} onClick={run}>
             {done !== null ? `Queued ${done} of ${batch.length}` : `Queue all ${batch.length}, in this order`}
           </button>
           <button type="button" className="quiet" onClick={() => setShow(false)}>

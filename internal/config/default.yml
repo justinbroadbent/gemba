@@ -90,6 +90,10 @@ workspaces:
       quiet_days: 3
       # A quick item still waiting after this many days is flagged.
       quick_days: 2
+      # Waiting is for work parked on someone else. It frees the hand, so it is
+      # limited per person, and flagged for a chase after this many days.
+      waiting_days: 3
+      waiting_limit: 2
       # Throughput is measured over this many weeks...
       throughput_weeks: 4
       # ...and the capacity line shows what fits in this many weeks.

@@ -77,20 +77,20 @@ func TestTriageQueuesAtFrontOrBack(t *testing.T) {
 		t.Fatalf("demo data should have an inbox, got %d", len(inbox))
 	}
 	a, b := inbox[0].Item.ID, inbox[1].Item.ID
-	if err := Triage(ctx, st, ws, a, "data", "standard", "", false); err != nil {
+	if err := Triage(ctx, st, ws, a, "data", "standard", "", false, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := Triage(ctx, st, ws, b, "data", "fixed-date", "maintenance", true); err != nil {
+	if err := Triage(ctx, st, ws, b, "data", "fixed-date", "maintenance", true, "2026-12-24"); err != nil {
 		t.Fatal(err)
 	}
 	q := ids(flow.Queue(items(t, st), "data"))
 	if q[0] != b || q[len(q)-1] != a {
 		t.Errorf("queue = %v; want #%d first and #%d last", q, b, a)
 	}
-	if err := Triage(ctx, st, ws, a, "data", "standard", "", false); !isConflict(err) {
+	if err := Triage(ctx, st, ws, a, "data", "standard", "", false, ""); !isConflict(err) {
 		t.Errorf("triaging twice should conflict, got %v", err)
 	}
-	if err := Triage(ctx, st, ws, inbox[2].Item.ID, "nowhere", "standard", "", false); err == nil {
+	if err := Triage(ctx, st, ws, inbox[2].Item.ID, "nowhere", "standard", "", false, ""); err == nil {
 		t.Error("unknown cell should be refused")
 	}
 }
@@ -258,5 +258,61 @@ func TestDecideGuards(t *testing.T) {
 	}
 	if len(st.Comments) != 0 {
 		t.Errorf("refused decisions must not write comments: %v", st.Comments)
+	}
+}
+
+func TestWaitFreesAHandAndResumeTakesItBack(t *testing.T) {
+	st, _ := setup(t)
+	var own, ticket store.Item
+	for _, i := range items(t, st) {
+		if flow.Stage(i) != flow.Doing || i.Assignee == "" {
+			continue
+		}
+		if i.Mirrored && ticket.ID == 0 {
+			ticket = i
+		} else if !i.Mirrored && own.ID == 0 {
+			own = i
+		}
+	}
+	if own.ID == 0 || ticket.ID == 0 {
+		t.Fatal("demo data should have planned work and a ticket in progress")
+	}
+	if err := Wait(ctx, st, own.ID, "the vendor", "someone-else", false); err == nil {
+		t.Error("only the person holding an item, or a manager, can park it")
+	}
+	if err := Wait(ctx, st, own.ID, "  ", own.Assignee, false); err == nil {
+		t.Error("waiting needs to say on whom")
+	}
+	if err := Wait(ctx, st, ticket.ID, "the requester", ticket.Assignee, false); err == nil || !strings.Contains(err.Error(), "ticketing system") {
+		t.Errorf("tickets are parked in the ticketing system, got %v", err)
+	}
+	if err := Wait(ctx, st, own.ID, "the vendor", own.Assignee, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, st, own.ID); flow.Stage(got) != flow.Waiting || got.WaitingOn != "the vendor" || got.WaitingSince == nil {
+		t.Errorf("should be waiting on the vendor: %+v", got)
+	}
+	if err := Wait(ctx, st, own.ID, "the vendor", own.Assignee, false); !isConflict(err) {
+		t.Errorf("parking twice should conflict, got %v", err)
+	}
+	if err := Resume(ctx, st, own.ID, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, st, own.ID); flow.Stage(got) != flow.Doing || got.WaitingOn != "" {
+		t.Errorf("should be back in hand: %+v", got)
+	}
+}
+
+func TestFixedDateNeedsADate(t *testing.T) {
+	st, ws := setup(t)
+	id := flow.Inbox(items(t, st), ws, now)[0].Item.ID
+	if err := Triage(ctx, st, ws, id, "data", "fixed-date", "", false, ""); err == nil {
+		t.Fatal("a fixed date without a date should be refused")
+	}
+	if err := Triage(ctx, st, ws, id, "data", "fixed-date", "", false, "2026-12-24"); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, st, id); got.Due == nil || got.Due.Format("Jan 2") != "Dec 24" {
+		t.Errorf("the date should be recorded: %+v", got.Due)
 	}
 }

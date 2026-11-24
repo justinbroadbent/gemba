@@ -251,9 +251,10 @@ type Next struct {
 // Mine is one person's view: what they have in progress and what to pull next.
 // It holds nothing historical.
 type Mine struct {
-	Person config.Person
-	Doing  []store.Item
-	Next   []Next
+	Person  config.Person
+	Doing   []store.Item
+	Waiting []store.Item
+	Next    []Next
 }
 
 func (m Mine) Full() bool { return len(m.Doing) >= m.Person.WIPLimit }
@@ -263,8 +264,14 @@ func (m Mine) Full() bool { return len(m.Doing) >= m.Person.WIPLimit }
 func BuildMine(items []store.Item, ws *config.Workspace, person config.Person, now time.Time) Mine {
 	m := Mine{Person: person}
 	for _, i := range items {
-		if Stage(i) == Doing && i.Assignee == person.Login {
+		if i.Assignee != person.Login {
+			continue
+		}
+		switch Stage(i) {
+		case Doing:
 			m.Doing = append(m.Doing, i)
+		case Waiting:
+			m.Waiting = append(m.Waiting, i)
 		}
 	}
 	sort.SliceStable(m.Doing, func(a, b int) bool { return begun(m.Doing[a]).Before(begun(m.Doing[b])) })

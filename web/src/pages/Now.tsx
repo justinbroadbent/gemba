@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { type Card, type Mine, type Workspace, home, useData } from "../api";
+import { type Card, type Mine, type Workspace, ApiError, home, post, useData } from "../api";
 import { TimeBar, TypeMark, useDetail } from "../Detail";
 
 /** One person's answer to "what should I be doing?": what is in hand, and the one thing to pull next. */
@@ -7,9 +7,19 @@ export function NowPage({ ws }: { ws: Workspace }) {
   const remembered = `gemba:${ws.slug}:me`;
   // A link can name the person (?as=login); otherwise it is whoever signed in, or whoever was picked last.
   const [as, setAs] = useState(() => new URLSearchParams(window.location.search).get("as") ?? ws.me ?? read(remembered) ?? "");
-  const { data, error } = useData<Mine>(`/api/w/${ws.slug}/mine${as ? `?as=${encodeURIComponent(as)}` : ""}`, 30_000);
+  const { data, error, reload } = useData<Mine>(`/api/w/${ws.slug}/mine${as ? `?as=${encodeURIComponent(as)}` : ""}`, 30_000);
   const open = useDetail();
   const changes = useChanges(ws.slug, data);
+  const [notice, setNotice] = useState<string | null>(null);
+  const act = async (path: string, body: unknown) => {
+    try {
+      await post(`/api/w/${ws.slug}/items/${path}`, body);
+      setNotice(null);
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : "Could not save that.");
+    }
+    reload();
+  };
 
   if (error) return <p className="notice stop">{error}</p>;
   if (!data) return null;
@@ -65,9 +75,11 @@ export function NowPage({ ws }: { ws: Workspace }) {
               {data.doing.length} of {data.person.limit}
             </span>
           </h2>
+          {notice && <p className="notice stop">{notice}</p>}
           <div className="hands">
             {data.doing.map((c, n) => (
-              <button key={c.id} type="button" className={`hand ${c.blocked ? "is-blocked" : ""}`} onClick={() => open(c)}>
+              <div key={c.id} className="hand-cell">
+              <button type="button" className={`hand ${c.blocked ? "is-blocked" : ""}`} onClick={() => open(c)}>
                 <span className="hand-title">
                   <TypeMark card={c} />
                   {c.title}
@@ -83,6 +95,8 @@ export function NowPage({ ws }: { ws: Workspace }) {
                 </span>
                 <TimeBar card={c} />
               </button>
+              {data.canAct && !c.blocked && (c.mirrored ? null : <Park onSave={(on) => act(`${c.id}/wait`, { on })} />)}
+              </div>
             ))}
             {Array.from({ length: free }, (_, n) => (
               <span key={n} className="hand free">
@@ -91,6 +105,39 @@ export function NowPage({ ws }: { ws: Workspace }) {
             ))}
           </div>
         </section>
+
+        {data.waiting.length > 0 && (
+          <section>
+            <h2 className="eyebrow">
+              Waiting on others
+              <span className={`count${data.waiting.length > data.waitLimit ? " warn" : ""}`}>
+                {data.waiting.length} of {data.waitLimit}. These do not hold a hand.
+              </span>
+            </h2>
+            <ol className="after">
+              {data.waiting.map((c) => (
+                <li key={c.id} className="waiting-row">
+                  <button type="button" onClick={() => open(c)}>
+                    <span className="num" />
+                    <span className="after-title">
+                      <TypeMark card={c} />
+                      {c.title}
+                    </span>
+                    <span className={`after-why${c.chase ? " warn" : ""}`}>
+                      {c.waitingFor} on {c.waitingOn}
+                      {c.chase && ". Time to chase"}
+                    </span>
+                  </button>
+                  {data.canAct && !c.mirrored && (
+                    <button type="button" className="quiet" onClick={() => act(`${c.id}/resume`, {})}>
+                      Take it back
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
         <section>
           <h2 className="eyebrow">{data.full ? "When a hand is free" : "Pull next"}</h2>
@@ -182,6 +229,34 @@ export function NowPage({ ws }: { ws: Workspace }) {
         </aside>
       )}
     </div>
+  );
+}
+
+/** Parks an item that cannot move until someone else does their part. */
+function Park({ onSave }: { onSave: (on: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [on, setOn] = useState("");
+  if (!open)
+    return (
+      <button type="button" className="quiet park" onClick={() => setOpen(true)}>
+        Waiting on someone
+      </button>
+    );
+  return (
+    <form
+      className="park-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(on);
+        setOpen(false);
+      }}
+    >
+      <input autoFocus required maxLength={120} placeholder="Who or what is it waiting on?" value={on} onChange={(e) => setOn(e.target.value)} />
+      <button type="submit">Set aside</button>
+      <button type="button" className="quiet" onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+    </form>
   );
 }
 

@@ -48,6 +48,9 @@ type card struct {
 	Day        int      `json:"day,omitempty"`        // in progress: which day this is
 	UsualDays  float64  `json:"usualDays,omitempty"`  // in progress: how many days work like it usually takes
 	WaitDays   *float64 `json:"waitDays,omitempty"`   // queued: days until it is likely to start, when known
+	WaitingOn  string   `json:"waitingOn,omitempty"`  // parked: who or what it is waiting on
+	WaitingFor string   `json:"waitingFor,omitempty"` // and for how long
+	Chase      bool     `json:"chase,omitempty"`      // waiting long enough to chase
 	QuietFor   string   `json:"quietFor,omitempty"`   // in progress with no recent activity
 	Reason     string   `json:"reason,omitempty"`     // queued: why it sits where it does
 	Starts     string   `json:"starts,omitempty"`     // queued: when it is likely to start
@@ -77,6 +80,16 @@ func (v view) card(i store.Item) card {
 		c.Day = int(v.now.Sub(*i.Started).Hours()/24) + 1
 		_, usual, _ := v.norms.Aging(i, v.ws, v.now)
 		c.UsualDays = usual.Hours() / 24
+	}
+	if flow.Stage(i) == flow.Waiting {
+		c.WaitingOn = i.WaitingOn
+		if c.WaitingOn == "" {
+			c.WaitingOn = "someone else"
+		}
+		if i.WaitingSince != nil {
+			c.WaitingFor = flow.Span(v.now.Sub(*i.WaitingSince))
+			c.Chase = v.now.Sub(*i.WaitingSince).Hours() > v.ws.Policies.WaitingDays*24
+		}
 	}
 	if flow.IsQuiet(i, v.ws, v.now) {
 		c.QuietFor = flow.Span(v.now.Sub(*i.Updated))
@@ -108,11 +121,12 @@ type personView struct {
 // handView is one person on the floor: what they hold, whether they have a
 // free hand, and what the queue suggests they pull.
 type handView struct {
-	Login string `json:"login"`
-	Name  string `json:"name"`
-	Limit int    `json:"limit"`
-	Items []card `json:"items"`
-	Pull  *card  `json:"pull"`
+	Login   string `json:"login"`
+	Name    string `json:"name"`
+	Limit   int    `json:"limit"`
+	Items   []card `json:"items"`
+	Waiting []card `json:"waiting"`
+	Pull    *card  `json:"pull"`
 }
 
 // queue describes a lane's queue with what each position means: the reason
@@ -195,7 +209,7 @@ func (v view) lane(l flow.Lane, items []store.Item) laneView {
 	out.Arrivals, out.ArrivalsUsual = flow.Arrivals(items, v.ws, l.Cell.ID, v.now)
 	pulls := flow.Pulls(l)
 	for _, p := range l.People {
-		h := handView{Login: p.Person.Login, Name: p.Person.Name, Limit: p.Person.WIPLimit, Items: v.cards(p.Items)}
+		h := handView{Login: p.Person.Login, Name: p.Person.Name, Limit: p.Person.WIPLimit, Items: v.cards(p.Items), Waiting: v.cards(p.Waiting)}
 		if next, ok := pulls[p.Person.Login]; ok {
 			for n := range out.Queue {
 				if out.Queue[n].ID == next.ID {
@@ -423,7 +437,10 @@ type mineView struct {
 	Full       bool         `json:"full"`
 	Doing      []card       `json:"doing"`
 	Next       []nextView   `json:"next"`
-	Quick      []card       `json:"quick"` // the cell's quick list
+	Quick      []card       `json:"quick"`   // the cell's quick list
+	Waiting    []card       `json:"waiting"` // parked on someone else
+	WaitLimit  int          `json:"waitLimit"`
+	CanAct     bool         `json:"canAct"` // the viewer may park and resume this person's work
 	Cell       string       `json:"cell,omitempty"`
 	Priorities []string     `json:"priorities"`
 	EditURL    string       `json:"editUrl,omitempty"` // where a manager changes the priorities
@@ -433,7 +450,7 @@ type mineView struct {
 
 func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, now time.Time) mineView {
 	v := newView(items, ws, now)
-	out := mineView{People: []personView{}, Doing: []card{}, Next: []nextView{}, Quick: []card{}, Priorities: lines(priorities)}
+	out := mineView{People: []personView{}, Doing: []card{}, Next: []nextView{}, Quick: []card{}, Waiting: []card{}, WaitLimit: ws.Policies.WaitingLimit, Priorities: lines(priorities)}
 	for _, p := range ws.People {
 		out.People = append(out.People, personView{Login: p.Login, Name: p.Name, Limit: p.WIPLimit})
 	}
@@ -442,6 +459,7 @@ func mineOf(items []store.Item, ws *config.Workspace, login, priorities string, 
 		return out
 	}
 	m := flow.BuildMine(items, ws, *person, now)
+	out.Waiting = v.cards(m.Waiting)
 	out.Person = &personView{person.Login, person.Name, len(m.Doing), person.WIPLimit}
 	described := map[int]card{}
 	if c := ws.Cell(person.Cell); c != nil {

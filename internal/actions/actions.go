@@ -66,7 +66,7 @@ func bottom(q []store.Item) float64 {
 func ptr[T any](v T) *T { return &v }
 
 // Triage gives an intake item a cell and a class of service, which queues it.
-func Triage(ctx context.Context, st store.Store, ws *config.Workspace, id int, cell, cos, kind string, toTop bool) error {
+func Triage(ctx context.Context, st store.Store, ws *config.Workspace, id int, cell, cos, kind string, toTop bool, due string) error {
 	if kind != "" && ws.Kind(kind) == nil {
 		return bad("Unknown kind of work %q", kind)
 	}
@@ -93,10 +93,71 @@ func Triage(ctx context.Context, st store.Store, ws *config.Workspace, id int, c
 		r = top(q)
 	}
 	change := store.Change{Cell: &cell, COS: &cos, Rank: &r}
+	if cos == "fixed-date" && item.Due == nil {
+		// A fixed date needs the date, or nothing can warn that it will be missed.
+		d, err := time.Parse("2006-01-02", due)
+		if err != nil {
+			return bad("Give the date this is due")
+		}
+		change.Due = &d
+	}
 	if kind != "" {
 		change.Kind = &kind
 	}
 	return st.Update(ctx, id, change)
+}
+
+const inTicketing = "This is a ticket: mark it as pending in the ticketing system and it will show as waiting here"
+
+// own finds an item and checks the caller may change its state: the person
+// holding it, or a manager.
+func own(ctx context.Context, st store.Store, id int, login string, manage bool) (store.Item, error) {
+	items, err := st.Items(ctx)
+	if err != nil {
+		return store.Item{}, err
+	}
+	item, err := find(items, id)
+	if err != nil {
+		return item, err
+	}
+	if !manage && (login == "" || item.Assignee != login) {
+		return item, bad("Only the person holding #%d or a manager can change it", id)
+	}
+	if item.Mirrored {
+		return item, bad(inTicketing)
+	}
+	return item, nil
+}
+
+// Wait parks an in-progress item until someone else does their part. It frees
+// the hand; the reason says who to chase.
+func Wait(ctx context.Context, st store.Store, id int, on, login string, manage bool) error {
+	item, err := own(ctx, st, id, login, manage)
+	if err != nil {
+		return err
+	}
+	if on = strings.TrimSpace(on); on == "" {
+		return bad("Say who or what it is waiting on")
+	}
+	if len(on) > 120 {
+		return bad("Keep the reason under 120 characters")
+	}
+	if flow.Stage(item) != flow.Doing {
+		return &Error{Msg: fmt.Sprintf("#%d is not in progress", id), Conflict: true}
+	}
+	return st.Update(ctx, id, store.Change{Status: ptr(store.StatusWaiting), WaitingOn: &on})
+}
+
+// Resume takes a waiting item back in hand.
+func Resume(ctx context.Context, st store.Store, id int, login string, manage bool) error {
+	item, err := own(ctx, st, id, login, manage)
+	if err != nil {
+		return err
+	}
+	if flow.Stage(item) != flow.Waiting {
+		return &Error{Msg: fmt.Sprintf("#%d is not waiting", id), Conflict: true}
+	}
+	return st.Update(ctx, id, store.Change{Status: ptr(store.StatusInProgress), WaitingOn: ptr("")})
 }
 
 // Move places a queued item directly before another one, or at the end when

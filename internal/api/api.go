@@ -92,6 +92,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/w/{ws}/queues/{cell}/move", s.in(toManage, s.move))
 	mux.HandleFunc("GET /api/w/{ws}/projects", s.in(toRead, s.projects))
 	mux.HandleFunc("GET /api/w/{ws}/mine", s.in(toRead, s.mine))
+	mux.HandleFunc("POST /api/w/{ws}/items/{id}/wait", s.in(toTriage, s.wait))
+	mux.HandleFunc("POST /api/w/{ws}/items/{id}/resume", s.in(toTriage, s.resume))
 	mux.HandleFunc("GET /api/w/{ws}/review", s.in(toRead, s.review))
 	mux.HandleFunc("GET /api/w/{ws}/tradeoff", s.in(toRead, s.tradeoff))
 	mux.HandleFunc("POST /api/w/{ws}/tradeoff", s.in(toManage, s.decide))
@@ -307,6 +309,7 @@ func (s *Server) mine(w http.ResponseWriter, r *http.Request, q *request) {
 	if g := q.ws.GitHub; q.can.manage && q.ws.Store == "github" && g.PrioritiesIssue > 0 {
 		out.EditURL = "https://github.com/" + g.Owner + "/" + g.Repo + "/issues/" + strconv.Itoa(g.PrioritiesIssue)
 	}
+	out.CanAct = out.Person != nil && (q.can.manage || q.can.login == out.Person.Login)
 	if l := s.lead(r, q); l != nil && out.Person != nil && l.Login == out.Person.Login {
 		out.Lead, out.Triage = true, len(inboxOf(items, q.ws, q.now).Rows)
 	}
@@ -319,6 +322,7 @@ func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 		COS  string `json:"cos"`
 		Kind string `json:"kind"`
 		Top  bool   `json:"top"`
+		Due  string `json:"due"`
 	}
 	id, ok := body(w, r, "id", &in)
 	if !ok {
@@ -328,11 +332,41 @@ func (s *Server) triage(w http.ResponseWriter, r *http.Request, q *request) {
 		fail(w, 403, "Only the triage lead or a manager can expedite work or put it at the front. Queue it at the back and tell them.")
 		return
 	}
-	if err := actions.Triage(r.Context(), q.store, q.ws, id, in.Cell, in.COS, in.Kind, in.Top); err != nil {
+	if err := actions.Triage(r.Context(), q.store, q.ws, id, in.Cell, in.COS, in.Kind, in.Top, in.Due); err != nil {
 		s.actionError(w, q, err)
 		return
 	}
 	s.audit(q, "triage", "item", id, "cell", in.Cell, "cos", in.COS, "kind", in.Kind, "top", in.Top)
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) wait(w http.ResponseWriter, r *http.Request, q *request) {
+	var in struct {
+		On string `json:"on"`
+	}
+	id, ok := body(w, r, "id", &in)
+	if !ok {
+		return
+	}
+	if err := actions.Wait(r.Context(), q.store, id, in.On, q.can.login, q.can.manage); err != nil {
+		s.actionError(w, q, err)
+		return
+	}
+	s.audit(q, "wait", "item", id, "on", in.On)
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) resume(w http.ResponseWriter, r *http.Request, q *request) {
+	var in struct{}
+	id, ok := body(w, r, "id", &in)
+	if !ok {
+		return
+	}
+	if err := actions.Resume(r.Context(), q.store, id, q.can.login, q.can.manage); err != nil {
+		s.actionError(w, q, err)
+		return
+	}
+	s.audit(q, "resume", "item", id)
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 

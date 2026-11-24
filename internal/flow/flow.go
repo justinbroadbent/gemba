@@ -18,7 +18,10 @@ const (
 	Intake = "intake"
 	Queued = "queued"
 	Doing  = "doing"
-	Done   = "done"
+	// Waiting: started, then parked until someone else does their part. It
+	// does not hold a hand, which is why each person may have only a few.
+	Waiting = "waiting"
+	Done    = "done"
 )
 
 // Stage derives where an item is. Triage (setting a class of service) is what
@@ -29,6 +32,8 @@ func Stage(i store.Item) string {
 		return Done
 	case store.StatusInProgress:
 		return Doing
+	case store.StatusWaiting:
+		return Waiting
 	}
 	if i.Cell != "" && i.COS != "" {
 		return Queued
@@ -150,8 +155,9 @@ func rank(i store.Item) float64 {
 // Load is one person's current work against their limit. It deliberately
 // carries nothing historical.
 type Load struct {
-	Person config.Person
-	Items  []store.Item
+	Person  config.Person
+	Items   []store.Item
+	Waiting []store.Item
 }
 
 func (l Load) Over() bool { return len(l.Items) > l.Person.WIPLimit }
@@ -224,8 +230,14 @@ func BuildLane(items []store.Item, ws *config.Workspace, cell config.Cell, now t
 		}
 		load := Load{Person: person}
 		for _, i := range items {
-			if Stage(i) == Doing && i.Assignee == person.Login {
+			if i.Assignee != person.Login {
+				continue
+			}
+			switch Stage(i) {
+			case Doing:
 				load.Items = append(load.Items, i)
+			case Waiting:
+				load.Waiting = append(load.Waiting, i)
 			}
 		}
 		l.People = append(l.People, load)

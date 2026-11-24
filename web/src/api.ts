@@ -26,6 +26,9 @@ export type Card = {
   usual?: string;
   day?: number;
   usualDays?: number;
+  waitingOn?: string;
+  waitingFor?: string;
+  chase?: boolean;
   quietFor?: string;
   reason?: string;
   starts?: string;
@@ -33,7 +36,7 @@ export type Card = {
   risk?: string;
 };
 
-export type Hand = { login: string; name: string; limit: number; items: Card[]; pull: Card | null };
+export type Hand = { login: string; name: string; limit: number; items: Card[]; waiting: Card[]; pull: Card | null };
 export type Share = { id: string; name: string; icon: string; count: number; pct: number };
 export type Alert = { level: "stop" | "warn"; text: string; cell?: string; id?: number; url?: string };
 
@@ -127,6 +130,9 @@ export type Mine = {
   doing: Card[];
   next: { card: Card; position: number; above: boolean }[];
   quick: Card[];
+  waiting: Card[];
+  waitLimit: number;
+  canAct: boolean;
   cell?: string;
   priorities: string[];
   editUrl?: string;

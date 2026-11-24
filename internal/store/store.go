@@ -4,9 +4,11 @@
 // deliberately small set of writes.
 //
 // Field ownership:
-//   - Gemba writes only Cell, Kind, COS (class of service), Rank, and comments. The
-//     one exception is setting Status back to open on a non-mirrored item that
-//     a trade-off decision paused.
+//   - Gemba writes only Cell, Kind, COS (class of service), Rank, the due date
+//     given at triage, and comments.
+//     It changes Status in two cases, and never on a mirrored item: back to
+//     open when a trade-off decision pauses work, and between in progress and
+//     waiting when the person holding an item says so.
 //   - Everything else is owned by the engineers or by whatever sync mirrors
 //     tickets in from an external system. Gemba never writes it.
 package store
@@ -19,6 +21,7 @@ import (
 const (
 	StatusOpen       = "open"
 	StatusInProgress = "in_progress"
+	StatusWaiting    = "waiting" // started, and parked until someone else does something
 	StatusDone       = "done"
 )
 
@@ -48,6 +51,8 @@ type Item struct {
 
 	BlockedReason string
 	BlockedSince  *time.Time
+	WaitingOn     string // who or what a waiting item is waiting on
+	WaitingSince  *time.Time
 	Started       *time.Time
 	Updated       *time.Time // when anything last happened to it
 	Closed        *time.Time
@@ -60,6 +65,9 @@ type Change struct {
 	COS    *string
 	Rank   *float64
 	Status *string
+	Due    *time.Time // set at triage for work with a fixed date
+	// WaitingOn goes with a change of Status to or from waiting.
+	WaitingOn *string
 }
 
 // Prioritizer is implemented by stores that can supply the team's current

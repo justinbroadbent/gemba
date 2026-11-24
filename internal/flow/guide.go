@@ -185,6 +185,24 @@ func Attention(items []store.Item, ws *config.Workspace, norms Norms, now time.T
 		c := ws.Cell(CellOf(i, ws))
 		add("stop", text, *c, &i)
 	}
+	for _, l := range lanes { // waiting that has gone on long enough to chase, or piled up
+		for _, p := range l.People {
+			for n := range p.Waiting {
+				i := p.Waiting[n]
+				if i.WaitingSince == nil || now.Sub(*i.WaitingSince) <= hours(ws.Policies.WaitingDays*24) {
+					continue
+				}
+				text := "Waiting " + Span(now.Sub(*i.WaitingSince))
+				if i.WaitingOn != "" {
+					text += " on " + i.WaitingOn
+				}
+				add("warn", fmt.Sprintf("%s: %s (%s). Time to chase", text, i.Title, p.Person.Name), l.Cell, &i)
+			}
+			if len(p.Waiting) > ws.Policies.WaitingLimit {
+				add("warn", fmt.Sprintf("%s has %d items waiting on others, against a limit of %d", p.Person.Name, len(p.Waiting), ws.Policies.WaitingLimit), l.Cell, nil)
+			}
+		}
+	}
 	for _, l := range lanes { // quick jobs that nobody has found the half hour for
 		for n := range l.Quick {
 			if i := l.Quick[n]; now.Sub(i.Created) > hours(ws.Policies.QuickDays*24) {
