@@ -83,8 +83,17 @@ export type Inbox = {
   canAssign: boolean;
 };
 
-export type Candidate = { id: number; title: string; cell?: string; stage: string };
-export type Preview = { item: Card; lane: Lane; falls: Card | null; alreadyAbove: boolean };
+export type Candidate = { id: number; title: string; cell?: string; cellName?: string; stage: string; icon: string; typeName: string; project?: string };
+export type Preview = {
+  item: Card;
+  lane: Lane;
+  falls: Card | null;
+  alreadyAbove: boolean;
+  behind: number;
+  delay?: string;
+  atRisk: Card[];
+  pause: { card: Card; note: string }[];
+};
 export type Tradeoff = { candidates: Candidate[]; preview: Preview | null };
 export type Note = { id: number; title: string; text: string };
 

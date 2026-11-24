@@ -476,7 +476,7 @@ func (s *Server) tradeoff(w http.ResponseWriter, r *http.Request, q *request) {
 		s.storeError(w, q, err)
 		return
 	}
-	out := tradeoffOf(items)
+	out := tradeoffOf(items, q.ws)
 	if raw := r.URL.Query().Get("item"); raw != "" {
 		id, _ := strconv.Atoi(raw)
 		p, err := actions.PreviewTradeoff(r.Context(), q.store, q.ws, id, r.URL.Query().Get("cell"), q.now)

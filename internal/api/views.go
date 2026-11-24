@@ -354,17 +354,32 @@ func inboxOf(items []store.Item, ws *config.Workspace, now time.Time) inboxView 
 }
 
 type candidate struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Cell  string `json:"cell,omitempty"`
-	Stage string `json:"stage"`
+	ID       int    `json:"id"`
+	Title    string `json:"title"`
+	Cell     string `json:"cell,omitempty"`
+	CellName string `json:"cellName,omitempty"`
+	Stage    string `json:"stage"`
+	Icon     string `json:"icon"`
+	TypeName string `json:"typeName"`
+	Project  string `json:"project,omitempty"`
+}
+
+// pauseView is one piece of work in progress that could be stopped to make
+// room, with what stopping it would cost.
+type pauseView struct {
+	Card card   `json:"card"`
+	Note string `json:"note"`
 }
 
 type previewView struct {
-	Item         card     `json:"item"`
-	Lane         laneView `json:"lane"`
-	Falls        *card    `json:"falls"`
-	AlreadyAbove bool     `json:"alreadyAbove"`
+	Item         card        `json:"item"`
+	Lane         laneView    `json:"lane"`
+	Falls        *card       `json:"falls"`
+	AlreadyAbove bool        `json:"alreadyAbove"`
+	Behind       int         `json:"behind"`          // queued items that move back one place
+	Delay        string      `json:"delay,omitempty"` // how much later each of them starts
+	AtRisk       []card      `json:"atRisk"`          // dated work this would put at risk
+	Pause        []pauseView `json:"pause"`           // work in progress, cheapest to stop first
 }
 
 type tradeoffView struct {
@@ -372,12 +387,17 @@ type tradeoffView struct {
 	Preview    *previewView `json:"preview"`
 }
 
-func tradeoffOf(items []store.Item) tradeoffView {
+func tradeoffOf(items []store.Item, ws *config.Workspace) tradeoffView {
 	out := tradeoffView{Candidates: []candidate{}}
 	sort.SliceStable(items, func(a, b int) bool { return items[a].Created.After(items[b].Created) })
 	for _, i := range items {
 		if s := flow.Stage(i); s == flow.Intake || s == flow.Queued {
-			out.Candidates = append(out.Candidates, candidate{i.ID, i.Title, i.Cell, s})
+			t := flow.TypeOf(i, ws)
+			c := candidate{ID: i.ID, Title: i.Title, Cell: i.Cell, Stage: s, Icon: flow.TypeIcon(t, ws), TypeName: flow.TypeName(t, ws), Project: i.Project}
+			if cell := ws.Cell(i.Cell); cell != nil {
+				c.CellName = cell.Name
+			}
+			out.Candidates = append(out.Candidates, c)
 		}
 	}
 	return out
@@ -389,6 +409,68 @@ func previewOf(p *actions.Preview, items []store.Item, ws *config.Workspace, now
 	if p.Falls != nil {
 		c := v.card(*p.Falls)
 		out.Falls = &c
+	}
+	out.AtRisk, out.Pause = []card{}, []pauseView{}
+
+	// Everything ahead of where the item sits now moves back one place.
+	before, after := p.Lane, p.Lane
+	after.Queue = []store.Item{p.Item}
+	out.Behind = len(p.Lane.Queue)
+	for n, i := range p.Lane.Queue {
+		if i.ID == p.Item.ID {
+			out.Behind = n
+			continue
+		}
+		after.Queue = append(after.Queue, i)
+	}
+	if p.Lane.Throughput > 0 && out.Behind > 0 {
+		out.Delay = flow.Span(time.Duration(7 * 24 / p.Lane.Throughput * float64(time.Hour)))
+	}
+	risky := map[int]bool{}
+	for n, o := range flow.Outlooks(before, ws, v.norms, now) {
+		risky[before.Queue[n].ID] = o.AtRisk
+	}
+	for n, o := range flow.Outlooks(after, ws, v.norms, now) {
+		if i := after.Queue[n]; o.AtRisk && !risky[i.ID] && i.ID != p.Item.ID {
+			c := v.card(i)
+			c.Risk = "Would miss " + i.Due.Format("Jan 2") + ": it needs to start by " + o.StartBy.Format("Jan 2")
+			out.AtRisk = append(out.AtRisk, c)
+		}
+	}
+
+	// What stopping each piece of work in progress would cost, cheapest first.
+	type costed struct {
+		pauseView
+		cost float64
+	}
+	var doing []costed
+	for _, i := range p.Lane.Doing {
+		c := v.card(i)
+		e := costed{pauseView: pauseView{Card: c}, cost: 0.5}
+		switch {
+		case c.Blocked != "":
+			e.cost, e.Note = -1, "Blocked: nothing is moving on it anyway"
+		case c.Day > 0 && c.UsualDays > 0:
+			e.cost = float64(c.Day) / c.UsualDays
+			e.Note = "Day " + strconv.Itoa(c.Day) + " of a usual " + strconv.Itoa(int(c.UsualDays+0.5))
+			switch {
+			case e.cost < 0.34:
+				e.Note += ": just started, so little would be lost"
+			case e.cost < 0.8:
+				e.Note += ": partway through"
+			default:
+				e.Note += ": nearly done, so costly to stop"
+			}
+		}
+		if i.Mirrored {
+			e.Note = strings.TrimSpace(e.Note + ". A ticket: it has to be set back to open in the ticketing system")
+			e.Note = strings.TrimPrefix(e.Note, ". ")
+		}
+		doing = append(doing, e)
+	}
+	sort.SliceStable(doing, func(a, b int) bool { return doing[a].cost < doing[b].cost })
+	for _, e := range doing {
+		out.Pause = append(out.Pause, e.pauseView)
 	}
 	return out
 }

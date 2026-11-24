@@ -173,21 +173,38 @@ try {
     await page.waitForFunction((n) => document.querySelectorAll("main .card").length < n, all, { timeout: 3000 });
   });
 
-  await check("projects and trade-off pages load", async () => {
+  await check("projects page loads", async () => {
     await go(`${w}/projects`, ".project");
-    await go(`${w}/tradeoff`, ".pickers select");
-    const options = await page.locator(".pickers select").first().locator("option").count();
-    expect(options > 1, "there are items to choose as the new priority");
   });
 
-  await check("trade-off: choosing an item shows what it displaces", async () => {
-    const select = page.locator(".pickers select").first();
-    const value = await select.locator("option").nth(1).getAttribute("value");
-    await select.selectOption(value);
-    await page.waitForSelector(".decision", { timeout: 5000 }).catch(async () => {
-      await page.locator(".pickers select").nth(1).selectOption({ index: 1 });
-      await page.waitForSelector(".decision", { timeout: 5000 });
-    });
+  await check("trade-off: search finds the item among many", async () => {
+    await go(`${w}/tradeoff`, ".finder input");
+    const all = await page.locator(".found button").count();
+    expect(all > 1, "there are items to choose as the new priority");
+    const title = (await page.locator(".found-title").nth(3).innerText()).trim();
+    await page.locator(".finder input").fill(title.split(" ").slice(-2).join(" "));
+    await page.waitForFunction((t) => [...document.querySelectorAll(".found-title")].every((e) => e.textContent.includes(t.split(" ").pop())), title, { timeout: 3000 });
+    await page.locator(".finder input").fill("zzzz-no-such-item");
+    await page.waitForSelector(".found-more");
+    expect((await page.locator(".found button").count()) === 0, "a search with no match lists nothing");
+  });
+
+  await check("trade-off: choosing an item shows what it costs, and the decision is recorded", async () => {
+    const data = await fetch(`${BASE}/api/w/${ws}/tradeoff`).then((r) => r.json());
+    const pick = data.candidates.filter((c) => c.stage === "queued").pop();
+    await page.locator(".finder input").fill(`#${pick.id}`);
+    await page.locator(".found button").first().click();
+    await page.waitForSelector(".decision");
+    expect((await page.locator(".chosen").innerText()).includes(pick.title), "the chosen item is shown");
+    expect((await page.locator(".cost li").count()) >= 1, "the cost is spelled out");
+    expect(await page.getByRole("button", { name: /Record decision/ }).isVisible(), "a manager can record it");
+    const anyway = page.getByRole("button", { name: "Stop something anyway" });
+    if (await anyway.count()) await anyway.click();
+    if (await page.locator(".choice").count()) expect((await page.locator(".pause-note").count()) > 0, "each thing that could stop says what stopping costs");
+    await page.locator(".sign input").fill("the browser test");
+    await page.getByRole("button", { name: /Record decision/ }).click();
+    await page.waitForSelector(".note", { timeout: 5000 });
+    expect((await page.locator(".note").first().innerText()).includes("Authorized by the browser test"), "the note names who decided");
   });
 
   await check("review: changing the period reloads the figures", async () => {
